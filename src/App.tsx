@@ -105,7 +105,7 @@ function App() {
       setLastUsedOptions({ mode: options.mode, text: options.text, template: options.template, scope: options.scope })
 
       // Auto-download each successful file (stagger slightly so the browser doesn't block multiple)
-      mappedResults.forEach((f, i) => {
+      mappedResults.forEach((f: ProcessedFile, i: number) => {
         if (f.status === 'success' && f.downloadUrl) {
           setTimeout(() => triggerDownload(f.downloadUrl!, f.name), i * 400)
         }

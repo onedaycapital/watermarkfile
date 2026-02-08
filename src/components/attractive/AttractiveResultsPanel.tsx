@@ -1,5 +1,4 @@
 import type { ProcessedFile } from '../../types'
-import { triggerDownload } from '../../lib/download'
 import { IconCheck, IconDownload, IconUpload } from './Icons'
 
 interface AttractiveResultsPanelProps {
