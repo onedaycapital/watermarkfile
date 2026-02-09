@@ -33,12 +33,13 @@ export function ConfirmEmailForDownload({
     setStatus('sending')
     setErrorMessage('')
     try {
+      const deliveryPayload = pendingDelivery.map(({ downloadUrl, name }) => {
+        const token = downloadUrl.replace(/^.*\/api\/download\//, '').replace(/\?.*$/, '')
+        return { token, name }
+      })
       const body = {
         email: normalized,
-        pendingDelivery: pendingDelivery.map(({ downloadUrl, name }) => {
-          const token = downloadUrl.replace(/^.*\/api\/download\//, '').replace(/\?.*$/, '')
-          return { token, name }
-        }),
+        pendingDelivery: deliveryPayload,
       }
       const res = await fetch(apiUrl('/api/auth/send-magic-link'), {
         method: 'POST',
@@ -59,13 +60,15 @@ export function ConfirmEmailForDownload({
     }
   }
 
-  if (pendingDelivery.length === 0) return null
+  const hasDeliveries = pendingDelivery.length > 0
 
   return (
     <div className={`rounded-xl border border-violet-200 bg-violet-50/80 p-4 ${className}`}>
       <h3 className="text-sm font-semibold text-slate-800">Confirm your email to download</h3>
       <p className="text-xs text-slate-600 mt-1">
-        We'll send you a magic link to verify your email. Click it to download your files to this device.
+        {hasDeliveries
+          ? "We'll send you a magic link to verify your email. Click it to download your files to this device."
+          : "Enter your email and we'll send you a magic link. Use it next time to get your files by email."}
       </p>
       {status === 'sent' ? (
         <p className="mt-3 text-sm font-medium text-violet-700">

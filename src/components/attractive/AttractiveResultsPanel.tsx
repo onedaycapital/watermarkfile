@@ -48,7 +48,7 @@ export function AttractiveResultsPanel({
         </div>
       </div>
       <div className="p-6 md:p-8">
-        {!isVerified && pendingDelivery.length > 0 && (
+        {files.length > 0 && (
           <ConfirmEmailForDownload
             pendingDelivery={pendingDelivery}
             initialEmail={initialEmail}
@@ -95,8 +95,10 @@ export function AttractiveResultsPanel({
                     Download
                   </a>
                 ) : (
-                  <span className="text-xs text-slate-500 font-medium">Confirm email above</span>
+                  <span className="text-xs text-violet-600 font-medium">Confirm email above to download</span>
                 )
+              ) : f.status === 'error' ? (
+                <span className="text-xs text-amber-600 font-medium">{f.errorMessage || 'Failed'}</span>
               ) : (
                 <span className="text-sm text-slate-500">—</span>
               )}
