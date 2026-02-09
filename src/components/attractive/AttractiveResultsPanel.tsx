@@ -1,31 +1,45 @@
 import type { ProcessedFile } from '../../types'
+import { track, AnalyticsEvents, getFileExtension } from '../../lib/analytics'
+import { ConfirmEmailForDownload } from '../ConfirmEmailForDownload'
 import { IconCheck, IconDownload, IconUpload } from './Icons'
 
 interface AttractiveResultsPanelProps {
   files: ProcessedFile[]
+  isVerified?: boolean
   onEmailToggle: () => void
   emailSaved: boolean
   emailDeliveryOn: boolean
+  onMagicLinkSent?: (email: string) => void
+  onConfirmBlockEmailChange?: (email: string) => void
   onSaveDefaults: (checked: boolean) => void
   onStartOver: () => void
+  initialEmail?: string
   className?: string
 }
 
 export function AttractiveResultsPanel({
   files,
+  isVerified = true,
   onEmailToggle,
   emailSaved: _emailSaved,
   emailDeliveryOn,
+  onMagicLinkSent,
+  onConfirmBlockEmailChange,
   onSaveDefaults,
   onStartOver,
+  initialEmail,
   className = '',
 }: AttractiveResultsPanelProps) {
+  const pendingDelivery = files
+    .filter((f): f is ProcessedFile & { downloadUrl: string } => f.status === 'success' && !!f.downloadUrl)
+    .map((f) => ({ downloadUrl: f.downloadUrl, name: f.name }))
+
   return (
     <div className={`rounded-3xl border border-slate-200/90 bg-white shadow-card-accent overflow-hidden ${className}`}>
       <div className="px-6 py-4 md:px-8 md:py-5 border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 to-white">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/25">
-            <IconCheck className="w-5 h-5 text-white" />
+            <IconCheck className="w-5 h-5 text-white" checkStroke="#10b981" />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-slate-800">Your files are ready</h2>
@@ -34,6 +48,15 @@ export function AttractiveResultsPanel({
         </div>
       </div>
       <div className="p-6 md:p-8">
+        {!isVerified && pendingDelivery.length > 0 && (
+          <ConfirmEmailForDownload
+            pendingDelivery={pendingDelivery}
+            initialEmail={initialEmail}
+            onMagicLinkSent={onMagicLinkSent}
+            onEmailChange={onConfirmBlockEmailChange}
+            className="mb-5"
+          />
+        )}
         <div className="flex flex-wrap gap-4 items-center mb-5">
           <div className="flex items-center gap-2.5">
             <button
@@ -56,14 +79,24 @@ export function AttractiveResultsPanel({
             <li key={f.id} className="flex items-center justify-between gap-3 py-3 px-4 rounded-xl bg-slate-50 border border-slate-100">
               <span className="text-sm text-slate-800 truncate font-medium">{f.name}</span>
               {f.status === 'success' && f.downloadUrl ? (
-                <a
-                  href={f.downloadUrl}
-                  download={f.name}
-                  className="shrink-0 text-xs font-semibold px-3 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white hover:from-violet-600 hover:to-fuchsia-600 flex items-center gap-1.5 shadow-md shadow-violet-500/20 transition-all duration-200"
-                >
-                  <IconDownload className="w-3.5 h-3.5" />
-                  Download
-                </a>
+                isVerified ? (
+                  <a
+                    href={f.downloadUrl}
+                    download={f.name}
+                    onClick={() => {
+                      track(AnalyticsEvents.DownloadClicked, {
+                        file_name: f.name,
+                        file_extension: getFileExtension(f.name),
+                      })
+                    }}
+                    className="shrink-0 text-xs font-semibold px-3 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white hover:from-violet-600 hover:to-fuchsia-600 flex items-center gap-1.5 shadow-md shadow-violet-500/20 transition-all duration-200"
+                  >
+                    <IconDownload className="w-3.5 h-3.5" />
+                    Download
+                  </a>
+                ) : (
+                  <span className="text-xs text-slate-500 font-medium">Confirm email above</span>
+                )
               ) : (
                 <span className="text-sm text-slate-500">—</span>
               )}
