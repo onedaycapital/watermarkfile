@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { WatermarkOptions, WatermarkMode, Template, Scope } from '../../types'
 import { getStoredDefaults, type StoredDefaults } from '../../lib/defaults'
+import { track, AnalyticsEvents, getFileExtension } from '../../lib/analytics'
 import { IconUpload, IconChevronRight, IconChevronDown, IconDownload, IconText, IconImage } from './Icons'
 
 const ACCEPT = '.pdf,.jpg,.jpeg,.png'
@@ -124,6 +125,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
   const [scope, setScope] = useState<Scope>(() => getStoredDefaults()?.scope ?? 'all-pages')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
+  const [disabledHint, setDisabledHint] = useState<string | null>(null)
 
   // Logo preview: create object URL when logo file is set, revoke on change/unmount
   useEffect(() => {
@@ -156,6 +158,12 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const items = Array.from(e.target.files || [])
+    if (items.length > 0) {
+      track(AnalyticsEvents.FilesSelected, {
+        file_count: items.length,
+        file_types: items.map((f) => getFileExtension(f.name)),
+      })
+    }
     setFiles((prev) => [...prev, ...items])
     e.target.value = ''
   }
@@ -171,7 +179,19 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     (mode === 'text' ? text.trim().length > 0 && text.length <= MAX_TEXT_LEN : !!logoFile)
 
   const handleSubmit = () => {
-    if (!canSubmit || disabled) return
+    if (disabled) return
+    if (!canSubmit) {
+      setDisabledHint(
+        files.length === 0
+          ? 'Select at least one file in step 3.'
+          : mode === 'text'
+            ? 'Enter watermark text in step 1.'
+            : 'Upload a logo in step 1.'
+      )
+      setTimeout(() => setDisabledHint(null), 3000)
+      return
+    }
+    setDisabledHint(null)
     onWatermarkRequest(files, {
       mode,
       text: mode === 'text' ? text : undefined,
@@ -325,11 +345,27 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                   </p>
                 )}
               </div>
+              <p className="mt-3 text-xs font-medium text-slate-600 text-center">
+                Upload up to 20 files per run<br />
+                Max 4.5 MB per file • 25 MB total per run
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500 text-center">
+                Files exceeding limits won't upload — nothing is saved.
+              </p>
             </StepTile>
             <StepConnector isLast={false} />
 
             <StepTile step={4} title="Download" accent={STEP_ACCENTS[3]}>
-              <div className="flex flex-col justify-center flex-1">
+              <div className="flex flex-col justify-center flex-1 gap-2">
+                {(!canSubmit || disabledHint) && (
+                  <p className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2" role="alert">
+                    {disabledHint || (files.length === 0
+                      ? 'Select at least one file in step 3 to enable.'
+                      : mode === 'text'
+                        ? 'Enter watermark text in step 1 to enable.'
+                        : 'Upload a logo in step 1 to enable.')}
+                  </p>
+                )}
                 <button
                   type="button"
                   onClick={handleSubmit}

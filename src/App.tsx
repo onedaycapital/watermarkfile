@@ -6,10 +6,21 @@ import type { PipelineState, ProcessedFile, WatermarkOptions } from './types'
 import type { StoredDefaults } from './lib/defaults'
 import { triggerDownload } from './lib/download'
 import { apiUrl } from './lib/api'
+import {
+  track,
+  setUserId as setAnalyticsUserId,
+  identify as identifyUser,
+  addUserProperty,
+  AnalyticsEvents,
+  getFileExtension,
+} from './lib/analytics'
+import { getStoredEmail, getIsVerified, setVerified, getMagicTokenFromUrl, clearMagicFromUrl } from './lib/auth'
 
 export type PipelineStatus = 'idle' | 'uploading' | 'processing' | 'ready' | 'error'
 
 const EMAIL_STORAGE_KEY = 'watermarkfile_email'
+/** Keep each request under Vercel serverless body limit (~4.5 MB). */
+const MAX_REQUEST_BODY_BYTES = 4.5 * 1024 * 1024
 
 function App() {
   const [pipelineState, setPipelineState] = useState<PipelineStatus>('idle')
@@ -24,19 +35,73 @@ function App() {
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [emailSaved, setEmailSaved] = useState(false)
   const [emailDeliveryToggled, setEmailDeliveryToggled] = useState(false)
-  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState<string | null>(() => getStoredEmail())
+  const [isVerified, setIsVerified] = useState(getIsVerified())
   const [lastUsedOptions, setLastUsedOptions] = useState<Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'> | null>(null)
   const [loadedDefaults, setLoadedDefaults] = useState<StoredDefaults | null>(null)
   const [showLoadDefaultsModal, setShowLoadDefaultsModal] = useState(false)
   const [showSaveDefaultsModal, setShowSaveDefaultsModal] = useState(false)
   const [loadDefaultsLoading, setLoadDefaultsLoading] = useState(false)
   const [saveDefaultsLoading, setSaveDefaultsLoading] = useState(false)
+  /** Email typed in the "Confirm email to download" block – use for toggle/save so we don't ask again. */
+  const [emailFromConfirmBlock, setEmailFromConfirmBlock] = useState('')
+
+  // Handle magic-link callback: verify token, set auth, trigger downloads, show results
+  useEffect(() => {
+    const token = getMagicTokenFromUrl()
+    if (!token) return
+    let cancelled = false
+    fetch(apiUrl('/api/auth/verify-magic-link'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled || !data?.ok) return
+        const email = (data.email || '').toLowerCase()
+        setVerified(email)
+        setUserEmail(email)
+        setIsVerified(true)
+        setAnalyticsUserId(email)
+        clearMagicFromUrl()
+        const items: Array<{ downloadUrl: string; name: string }> = data.pendingDeliveries || []
+        if (items.length > 0) {
+          setPipelineState('ready')
+          setResults(
+            items.map((item: { downloadUrl: string; name: string }, i: number) => ({
+              id: `magic-${i}`,
+              name: item.name,
+              status: 'success' as const,
+              downloadUrl: apiUrl(item.downloadUrl),
+            }))
+          )
+          items.forEach((item: { downloadUrl: string; name: string }, i: number) => {
+            setTimeout(() => triggerDownload(apiUrl(item.downloadUrl), item.name), i * 400)
+          })
+        }
+        // Load defaults for returning user
+        return fetch(apiUrl(`/api/defaults?email=${encodeURIComponent(email)}`))
+      })
+      .then((res) => (res?.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.mode) return
+        setLoadedDefaults({
+          mode: data.mode,
+          text: data.text,
+          template: data.template,
+          scope: data.scope,
+        })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   // Auto-load defaults for returning users (email stored from previous session)
   useEffect(() => {
-    const storedEmail = localStorage.getItem(EMAIL_STORAGE_KEY)
-    if (!storedEmail?.trim()) return
-    fetch(apiUrl(`/api/defaults?email=${encodeURIComponent(storedEmail.trim().toLowerCase())}`))
+    const storedEmail = getStoredEmail()
+    if (!storedEmail) return
+    fetch(apiUrl(`/api/defaults?email=${encodeURIComponent(storedEmail)}`))
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.mode && data?.template && data?.scope) {
@@ -51,7 +116,22 @@ function App() {
       .catch(() => {})
   }, [])
 
+  /** Sequential uploads so each request stays under Vercel's ~4.5 MB serverless body limit. */
   const onWatermarkRequest = async (files: File[], options: WatermarkOptions) => {
+    const logoSize = options.mode === 'logo' && options.logoFile ? options.logoFile.size : 0
+    const sizeLimitMsg = `File too large (max ${(MAX_REQUEST_BODY_BYTES / 1024 / 1024).toFixed(1)} MB per file).`
+
+    const fileTypes = files.map((f) => getFileExtension(f.name))
+    const totalSizeBytes = files.reduce((sum, f) => sum + f.size, 0)
+    track(AnalyticsEvents.WatermarkStarted, {
+      file_count: files.length,
+      file_types: fileTypes,
+      total_size_bytes: totalSizeBytes,
+      mode: options.mode,
+      template: options.template,
+      scope: options.scope,
+    })
+
     setPipelineState('uploading')
     setPipelineProgress({
       phase: 'uploading',
@@ -61,58 +141,115 @@ function App() {
       fileErrors: [],
     })
 
-    const form = new FormData()
-    files.forEach((f) => form.append('files', f))
-    form.append('mode', options.mode)
-    form.append('text', options.text ?? '')
-    form.append('template', options.template)
-    form.append('scope', options.scope)
-    if (options.mode === 'logo' && options.logoFile) {
-      form.append('logo', options.logoFile)
-    }
-
     setPipelineState('processing')
     setPipelineProgress((p) => ({ ...p, phase: 'processing', currentStep: 2 }))
 
+    const mappedResults: ProcessedFile[] = []
+
     try {
-      const res = await fetch(apiUrl('/api/watermark'), {
-        method: 'POST',
-        body: form,
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        throw new Error(data.error || res.statusText || 'Request failed')
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        setPipelineProgress((p) => ({ ...p, processedCount: i }))
+
+        if (file.size + logoSize > MAX_REQUEST_BODY_BYTES) {
+          track(AnalyticsEvents.FileSkippedSizeLimit, {
+            file_name: file.name,
+            file_extension: getFileExtension(file.name),
+            file_size_bytes: file.size,
+          })
+          mappedResults.push({
+            id: `size-${i}`,
+            name: file.name,
+            status: 'error',
+            errorMessage: sizeLimitMsg,
+          })
+          continue
+        }
+
+        const form = new FormData()
+        form.append('files', file)
+        form.append('mode', options.mode)
+        form.append('text', options.text ?? '')
+        form.append('template', options.template)
+        form.append('scope', options.scope)
+        if (isVerified && userEmail) form.append('email', userEmail)
+        if (options.mode === 'logo' && options.logoFile) {
+          form.append('logo', options.logoFile)
+        }
+
+        const res = await fetch(apiUrl('/api/watermark'), {
+          method: 'POST',
+          body: form,
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          mappedResults.push({
+            id: `err-${i}`,
+            name: file.name,
+            status: 'error',
+            errorMessage: data.error || res.statusText || 'Request failed',
+          })
+          continue
+        }
+        const fileList = Array.isArray(data.files) ? data.files : []
+        const first = fileList[0]
+        if (first) {
+          const status = String(first.status || '').toLowerCase() === 'success' ? 'success' : 'error'
+          mappedResults.push({
+            id: first.id,
+            name: first.name ?? file.name,
+            status,
+            downloadUrl: status === 'success' && first.downloadUrl ? apiUrl(first.downloadUrl) : undefined,
+            errorMessage: first.errorMessage,
+          })
+        } else {
+          mappedResults.push({
+            id: `err-${i}`,
+            name: file.name,
+            status: 'error',
+            errorMessage: 'No result returned',
+          })
+        }
       }
-      const fileList = Array.isArray(data.files) ? data.files : []
+
       setPipelineState('ready')
       setPipelineProgress((p) => ({
         ...p,
         phase: 'ready',
         currentStep: 3,
-        processedCount: fileList.length,
+        processedCount: files.length,
       }))
-      const mappedResults = fileList.map((f: ProcessedFile & { downloadUrl?: string }) => {
-        const status = String(f.status || '').toLowerCase() === 'success' ? 'success' : 'error'
-        return {
-          id: f.id,
-          name: f.name ?? '',
-          status,
-          downloadUrl: status === 'success' && f.downloadUrl ? apiUrl(f.downloadUrl) : undefined,
-          errorMessage: f.errorMessage,
-        }
-      })
       setResults(mappedResults)
       setLastUsedOptions({ mode: options.mode, text: options.text, template: options.template, scope: options.scope })
 
-      // Auto-download each successful file (stagger slightly so the browser doesn't block multiple)
-      mappedResults.forEach((f: ProcessedFile, i: number) => {
-        if (f.status === 'success' && f.downloadUrl) {
-          setTimeout(() => triggerDownload(f.downloadUrl!, f.name), i * 400)
-        }
+      const successCount = mappedResults.filter((f) => f.status === 'success').length
+      const errorCount = mappedResults.filter((f) => f.status === 'error').length
+      const resultFileTypes = mappedResults.map((f) => getFileExtension(f.name))
+      track(AnalyticsEvents.WatermarkCompleted, {
+        file_count: files.length,
+        success_count: successCount,
+        error_count: errorCount,
+        file_types: resultFileTypes,
+        mode: options.mode,
+        template: options.template,
+        scope: options.scope,
       })
+      addUserProperty('total_uploads', 1)
+      identifyUser({ last_upload_file_types: resultFileTypes })
+
+      if (isVerified) {
+        mappedResults.forEach((f: ProcessedFile, i: number) => {
+          if (f.status === 'success' && f.downloadUrl) {
+            setTimeout(() => triggerDownload(f.downloadUrl!, f.name), i * 400)
+          }
+        })
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Processing failed'
-      setPipelineState('error')
+      track(AnalyticsEvents.WatermarkFailed, {
+        file_count: files.length,
+        error_message: message,
+      })
       setPipelineProgress((p) => ({
         ...p,
         phase: 'error',
@@ -126,20 +263,53 @@ function App() {
           errorMessage: message,
         }))
       )
+      setPipelineState('ready')
     }
   }
 
   const onEmailToggleClick = () => {
     if (!emailSaved) {
-      setShowEmailModal(true)
+      const useEmail = emailFromConfirmBlock.trim() || undefined
+      if (useEmail) {
+        setUserEmail(useEmail)
+        setEmailSaved(true)
+        setEmailDeliveryToggled(true)
+        setEmailFromConfirmBlock('')
+        try {
+          localStorage.setItem(EMAIL_STORAGE_KEY, useEmail)
+        } catch {
+          // ignore
+        }
+      } else {
+        track(AnalyticsEvents.EmailCaptureOpened)
+        setShowEmailModal(true)
+      }
     } else {
       setEmailDeliveryToggled((v) => !v)
+      track(AnalyticsEvents.EmailToggled, { enabled: !emailDeliveryToggled })
+    }
+  }
+
+  /** When user sends magic link from results panel, use that email for "Email me files" and "Save as default" so we don't ask again. */
+  const onMagicLinkEmailSent = (email: string) => {
+    const normalized = email.trim().toLowerCase()
+    setUserEmail(normalized)
+    setEmailSaved(true)
+    setEmailDeliveryToggled(true)
+    setAnalyticsUserId(normalized)
+    try {
+      localStorage.setItem(EMAIL_STORAGE_KEY, normalized)
+    } catch {
+      // ignore
     }
   }
 
   const onEmailSaved = (email: string) => {
     const normalized = email.trim().toLowerCase()
     setUserEmail(normalized)
+    setAnalyticsUserId(normalized)
+    track(AnalyticsEvents.EmailCaptured)
+    identifyUser({ email_captured: true })
     try {
       localStorage.setItem(EMAIL_STORAGE_KEY, normalized)
     } catch {
@@ -168,10 +338,12 @@ function App() {
   }
 
   const onSkipEmail = () => {
+    track(AnalyticsEvents.EmailSkipped)
     setShowEmailModal(false)
   }
 
   const onStartOver = () => {
+    track(AnalyticsEvents.StartOverClicked)
     setResults([])
     setPipelineState('idle')
     setPipelineProgress({
@@ -188,12 +360,29 @@ function App() {
       setShowSaveDefaultsModal(false)
       return
     }
-    if (userEmail && lastUsedOptions) {
-      setSaveDefaultsLoading(true)
-      saveDefaultsToApi(userEmail, lastUsedOptions)
-        .then(() => setShowSaveDefaultsModal(false))
-        .finally(() => setSaveDefaultsLoading(false))
-      return
+    track(AnalyticsEvents.SaveDefaultsClicked)
+    const emailToUse = (userEmail || emailFromConfirmBlock.trim() || '').toLowerCase() || null
+    if (emailToUse) {
+      if (!userEmail) {
+        setUserEmail(emailToUse)
+        setEmailSaved(true)
+        setEmailFromConfirmBlock('')
+        try {
+          localStorage.setItem(EMAIL_STORAGE_KEY, emailToUse)
+        } catch {
+          // ignore
+        }
+      }
+      if (lastUsedOptions) {
+        setSaveDefaultsLoading(true)
+        saveDefaultsToApi(emailToUse, lastUsedOptions)
+          .then(() => {
+            track(AnalyticsEvents.SaveDefaultsSuccess)
+            setShowSaveDefaultsModal(false)
+          })
+          .finally(() => setSaveDefaultsLoading(false))
+        return
+      }
     }
     setShowSaveDefaultsModal(true)
   }
@@ -205,6 +394,8 @@ function App() {
       const normalized = email.trim().toLowerCase()
       await saveDefaultsToApi(normalized, lastUsedOptions)
       setUserEmail(normalized)
+      setAnalyticsUserId(normalized)
+      track(AnalyticsEvents.SaveDefaultsSuccess)
       setShowSaveDefaultsModal(false)
     } finally {
       setSaveDefaultsLoading(false)
@@ -212,6 +403,7 @@ function App() {
   }
 
   const onLoadDefaultsClick = () => {
+    track(AnalyticsEvents.LoadDefaultsClicked)
     setShowLoadDefaultsModal(true)
   }
 
@@ -230,8 +422,12 @@ function App() {
         template: data.template,
         scope: data.scope,
       })
+      track(AnalyticsEvents.LoadDefaultsSuccess)
       setShowLoadDefaultsModal(false)
     } catch (err) {
+      track(AnalyticsEvents.LoadDefaultsFailed, {
+        error_message: err instanceof Error ? err.message : 'Could not load settings',
+      })
       alert(err instanceof Error ? err.message : 'Could not load settings')
     } finally {
       setLoadDefaultsLoading(false)
@@ -248,15 +444,19 @@ function App() {
         pipelineState={pipelineState}
         pipelineProgress={pipelineProgress}
         results={results}
+        isVerified={isVerified}
         emailSaved={emailSaved}
         emailDeliveryToggled={emailDeliveryToggled}
         onWatermarkRequest={onWatermarkRequest}
         onEmailToggleClick={onEmailToggleClick}
+        onMagicLinkEmailSent={onMagicLinkEmailSent}
+        onConfirmBlockEmailChange={setEmailFromConfirmBlock}
         onSaveDefaults={onSaveDefaults}
         onStartOver={onStartOver}
         onLoadDefaultsClick={onLoadDefaultsClick}
         loadedDefaults={loadedDefaults}
         onDefaultsApplied={onDefaultsApplied}
+        userEmail={userEmail}
       />
 
       <EmailCaptureModal
