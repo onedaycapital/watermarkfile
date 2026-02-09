@@ -26,10 +26,24 @@ export function IconChevronDown({ className = 'w-4 h-4' }: { className?: string 
   )
 }
 
-export function IconCheck({ className = 'w-4 h-4' }: { className?: string }) {
+export function IconCheck({
+  className = 'w-4 h-4',
+  checkStroke = 'white',
+}: {
+  className?: string
+  checkStroke?: string
+}) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 12.5l4 4 10-10" />
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="10" fill="currentColor" />
+      <path
+        d="M8 12l3 3 5-6"
+        stroke={checkStroke}
+        strokeWidth="2.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
     </svg>
   )
 }
