@@ -72,11 +72,13 @@ export function AttractiveResultsPanel({
                   <button
                     type="button"
                     onClick={() => {
+                      const url = f.downloadUrl
+                      if (!url) return
                       track(AnalyticsEvents.DownloadClicked, {
                         file_name: f.name,
                         file_extension: getFileExtension(f.name),
                       })
-                      triggerDownload(f.downloadUrl, f.name)
+                      triggerDownload(url, f.name)
                     }}
                     className="shrink-0 text-xs font-semibold px-3 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white hover:from-violet-600 hover:to-fuchsia-600 flex items-center gap-1.5 shadow-md shadow-violet-500/20 transition-all duration-200"
                   >
