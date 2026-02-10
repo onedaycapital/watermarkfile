@@ -17,7 +17,7 @@ import {
   cleanupExpiredTokens,
 } from './store.js'
 import { sendMagicLinkEmail, sendReplyWithAttachments } from './email.js'
-import { upsertUserStats, saveFileToStorage, saveDefaultLogo, getDefaultLogoBuffer, isSupabaseConfigured, getUserDefaults, upsertUserDefaults, hasUserInStats, checkMonthlyLimit } from './supabase.js'
+import { upsertUserStats, saveFileToStorage, saveDefaultLogo, saveLogoAsset, getDefaultLogoBuffer, isSupabaseConfigured, getUserDefaults, upsertUserDefaults, hasUserInStats, checkMonthlyLimit, listLogoAssets, setDefaultLogo } from './supabase.js'
 import { processInboundEmail } from './inbound.js'
 
 const app = express()
@@ -96,7 +96,8 @@ app.get('/api/defaults', async (req, res) => {
     if (isSupabaseConfigured()) upsertUserStats(email, 0).catch((err) => console.error('[supabase] upsertUserStats (get-defaults):', err.message))
     const payload = { mode: fromDb.mode, text: fromDb.text, template: fromDb.template, scope: fromDb.scope, email }
     if (fromDb.logo_storage_path) {
-      payload.logo_url = `/api/defaults/logo?email=${encodeURIComponent(email)}`
+      const v = fromDb.updated_at ? encodeURIComponent(String(fromDb.updated_at)) : Date.now()
+      payload.logo_url = `/api/defaults/logo?email=${encodeURIComponent(email)}&v=${v}`
     }
     return res.json(payload)
   }
@@ -109,18 +110,50 @@ app.get('/api/defaults', async (req, res) => {
   res.json({ mode: saved.mode, text: saved.text, template: saved.template, scope: saved.scope, email })
 })
 
-// GET /api/defaults/logo?email= — stream default logo (same-origin; avoids CORS with Supabase signed URL)
+// GET /api/defaults/logo?email= — stream default logo. Optional &path= for a specific asset (must belong to email).
 app.get('/api/defaults/logo', async (req, res) => {
   const email = (req.query.email || '').toString().trim().toLowerCase()
+  const pathParam = (req.query.path || '').toString().trim()
   if (!email) return res.status(400).send('Email required')
   if (!isSupabaseConfigured()) return res.status(503).send('Storage not configured')
-  const fromDb = await getUserDefaults(email)
-  if (!fromDb?.logo_storage_path) return res.status(404).send('No default logo for this email')
-  const result = await getDefaultLogoBuffer(fromDb.logo_storage_path)
+  let storagePath
+  if (pathParam) {
+    const decoded = decodeURIComponent(pathParam)
+    const prefix = `default-logos/${email.replace(/[@.+]/g, '_')}/`
+    if (!decoded.startsWith(prefix)) return res.status(403).send('Invalid path')
+    storagePath = decoded
+  } else {
+    const fromDb = await getUserDefaults(email)
+    if (!fromDb?.logo_storage_path) return res.status(404).send('No default logo for this email')
+    storagePath = fromDb.logo_storage_path
+  }
+  const result = await getDefaultLogoBuffer(storagePath)
   if (!result) return res.status(404).send('Logo not found')
   res.setHeader('Content-Type', result.contentType)
   res.setHeader('Cache-Control', 'private, max-age=3600')
   res.send(result.buffer)
+})
+
+// GET /api/defaults/logo-assets?email= — list logo assets for user (for "Select from your assets").
+app.get('/api/defaults/logo-assets', async (req, res) => {
+  const email = (req.query.email || '').toString().trim().toLowerCase()
+  if (!email) return res.status(400).json({ error: 'Email required' })
+  if (!isSupabaseConfigured()) return res.json({ assets: [] })
+  const assets = await listLogoAssets(email)
+  res.json({ assets })
+})
+
+// POST /api/defaults/logo/set-default — set an existing asset as the default logo.
+app.post('/api/defaults/logo/set-default', async (req, res) => {
+  const email = (req.body?.email || '').toString().trim().toLowerCase()
+  const storagePath = (req.body?.storage_path || '').toString().trim()
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Valid email required' })
+  if (!storagePath) return res.status(400).json({ error: 'storage_path required' })
+  const prefix = `default-logos/${email.replace(/[@.+]/g, '_')}/`
+  if (!storagePath.startsWith(prefix)) return res.status(403).json({ error: 'Invalid path for this email' })
+  if (!isSupabaseConfigured()) return res.status(503).json({ error: 'Storage not configured' })
+  await setDefaultLogo(email, storagePath)
+  res.json({ ok: true })
 })
 
 // 12 offerings: (Logo|Text) × (Diagonal|Repeating|Footer) × (All Pages|First Page Only) — each a unique default
@@ -466,9 +499,7 @@ app.post('/api/watermark', upload.fields([
         if (isSupabaseConfigured()) {
           upsertUserStats(email, successCount).catch((err) => console.error('[supabase] upsertUserStats:', err.message))
           if (mode === 'logo' && logoFile) {
-            saveDefaultLogo(email, logoFile.buffer, logoFile.mimetype).then((logoPath) => {
-              if (logoPath) upsertUserDefaults(email, { mode, text: text || '', template, scope, logo_storage_path: logoPath }).catch((e) => console.error('[supabase] upsertUserDefaults logo:', e.message))
-            }).catch((err) => console.error('[supabase] saveDefaultLogo:', err.message))
+            saveLogoAsset(email, logoFile.buffer, logoFile.mimetype, { setAsDefault: false }).catch((err) => console.error('[supabase] saveLogoAsset:', err.message))
           }
         } else {
           console.log('[supabase] Skipped: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on Railway to persist stats and storage.')

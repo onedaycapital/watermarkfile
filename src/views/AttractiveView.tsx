@@ -23,6 +23,7 @@ export interface AttractiveViewProps {
   onMagicLinkEmailSent?: (email: string) => void
   onConfirmBlockEmailChange?: (email: string) => void
   onRequestSaveDefaults: (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>, logoFile?: File) => void
+  onRefetchDefaults?: (email: string) => void
   onStartOver: () => void
   onLoadDefaultsClick?: () => void
   loadedDefaults: StoredDefaults | null
@@ -43,6 +44,7 @@ export function AttractiveView({
   onMagicLinkEmailSent,
   onConfirmBlockEmailChange,
   onRequestSaveDefaults,
+  onRefetchDefaults,
   onStartOver,
   onLoadDefaultsClick,
   loadedDefaults,
@@ -81,6 +83,7 @@ export function AttractiveView({
                 loadedDefaults={loadedDefaults}
                 onLoadDefaultsClick={onLoadDefaultsClick}
                 onRequestSaveDefaults={onRequestSaveDefaults}
+                onRefetchDefaults={onRefetchDefaults}
                 userEmail={userEmail ?? undefined}
               />
               <div className="flex flex-wrap justify-center gap-x-5 gap-y-1.5 text-sm text-white/85">

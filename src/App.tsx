@@ -167,6 +167,30 @@ function App() {
     loadDefaultsForUser()
   }, [loadDefaultsForUser])
 
+  /** Refetch defaults from API and update UI (e.g. after saving new default logo). */
+  const refetchDefaultsForEmail = useCallback((email: string) => {
+    const normalized = email.trim().toLowerCase()
+    fetch(apiUrl(`/api/defaults?email=${encodeURIComponent(normalized)}`), { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.mode) return
+        const mode: WatermarkMode = data.mode === 'logo' ? 'logo' : 'text'
+        const template: Template = ['diagonal-center', 'repeating-pattern', 'footer-tag'].includes(data.template) ? data.template : 'diagonal-center'
+        const scope: Scope = data.scope === 'first-page-only' ? 'first-page-only' : 'all-pages'
+        const next: StoredDefaults = {
+          mode,
+          text: typeof data.text === 'string' ? data.text : '',
+          template,
+          scope,
+          logo_url: data.logo_url,
+          email: normalized,
+        }
+        setStoredDefaults({ mode: next.mode, text: next.text, template: next.template, scope: next.scope })
+        setLoadedDefaults(next)
+      })
+      .catch(() => {})
+  }, [])
+
   /** Sequential uploads so each request stays under Vercel's ~4.5 MB serverless body limit. */
   const onWatermarkRequest = async (files: File[], options: WatermarkOptions, extras?: { emailMeFiles?: boolean }) => {
     const emailMeFiles = !!extras?.emailMeFiles
@@ -483,6 +507,7 @@ function App() {
           track(AnalyticsEvents.SaveDefaultsSuccess)
           setPendingSaveDefaults(null)
           setPendingLogoFile(null)
+          refetchDefaultsForEmail(emailToUse)
         })
         .catch((err) => {
           alert(err instanceof Error ? err.message : 'Failed to save defaults')
@@ -507,6 +532,7 @@ function App() {
       setShowSaveDefaultsModal(false)
       setPendingSaveDefaults(null)
       setPendingLogoFile(null)
+      refetchDefaultsForEmail(normalized)
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to save defaults')
     } finally {
@@ -574,6 +600,7 @@ function App() {
         onMagicLinkEmailSent={onMagicLinkEmailSent}
         onConfirmBlockEmailChange={setEmailFromConfirmBlock}
         onRequestSaveDefaults={onRequestSaveDefaults}
+        onRefetchDefaults={refetchDefaultsForEmail}
         onStartOver={onStartOver}
         onLoadDefaultsClick={userEmail ? undefined : onLoadDefaultsClick}
         loadedDefaults={loadedDefaults}

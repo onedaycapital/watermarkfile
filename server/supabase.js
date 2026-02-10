@@ -3,6 +3,7 @@
  * If SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing, all functions no-op.
  */
 
+import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 
 const url = (process.env.SUPABASE_URL || '').toString().trim()
@@ -175,31 +176,131 @@ export async function saveFileToStorage(email, fileName, buffer, contentType) {
 }
 
 /**
- * Upload default logo to Storage and return storage path.
+ * Save a logo as an asset (and optionally set as default). Uses user_logo_assets table.
+ * @param {string} email
+ * @param {Buffer} buffer
+ * @param {string} contentType
+ * @param {{ setAsDefault?: boolean }} [opts]
+ * @returns {Promise<string | null>} storage path or null
+ */
+export async function saveLogoAsset(email, buffer, contentType, opts = {}) {
+  if (!client) return null
+  const setAsDefault = !!opts.setAsDefault
+  try {
+    const prefix = sanitizeEmailForPath(email)
+    const ext = (contentType || '').toLowerCase().includes('png') ? 'png' : 'jpg'
+    const id = crypto.randomUUID()
+    const storagePath = `${DEFAULT_LOGOS_PREFIX}/${prefix}/assets/${id}.${ext}`
+    const { error: uploadError } = await client.storage.from(BUCKET).upload(storagePath, buffer, {
+      contentType: contentType || 'image/png',
+      upsert: false,
+    })
+    if (uploadError) {
+      console.error('[supabase] saveLogoAsset upload:', uploadError.message)
+      return null
+    }
+    const { error: insertError } = await client.from('user_logo_assets').insert({
+      email: email.toLowerCase().trim(),
+      storage_path: storagePath,
+      is_default: setAsDefault,
+    })
+    if (insertError) {
+      console.error('[supabase] saveLogoAsset insert:', insertError.message)
+      return null
+    }
+    if (setAsDefault) {
+      await setDefaultLogo(email, storagePath)
+    }
+    return storagePath
+  } catch (err) {
+    console.error('[supabase] saveLogoAsset:', err.message)
+    return null
+  }
+}
+
+/**
+ * List logo assets for an email (newest first). Includes legacy default (user_defaults.logo_storage_path) if not in assets table.
+ * @param {string} email
+ * @returns {Promise<{ id: string, storage_path: string, created_at: string | null, is_default: boolean }[]>}
+ */
+export async function listLogoAssets(email) {
+  if (!client || !email) return []
+  try {
+    const normalized = email.toLowerCase().trim()
+    const { data, error } = await client
+      .from('user_logo_assets')
+      .select('id, storage_path, created_at, is_default')
+      .eq('email', normalized)
+      .order('created_at', { ascending: false })
+    if (error) {
+      console.error('[supabase] listLogoAssets:', error.message)
+      return []
+    }
+    const list = (data || []).map((row) => ({
+      id: row.id,
+      storage_path: row.storage_path,
+      created_at: row.created_at,
+      is_default: !!row.is_default,
+    }))
+    const defaults = await getUserDefaults(normalized)
+    if (defaults?.logo_storage_path && !list.some((a) => a.storage_path === defaults.logo_storage_path)) {
+      list.unshift({
+        id: 'legacy',
+        storage_path: defaults.logo_storage_path,
+        created_at: null,
+        is_default: true,
+      })
+    }
+    return list
+  } catch (err) {
+    console.error('[supabase] listLogoAssets:', err.message)
+    return []
+  }
+}
+
+/**
+ * Set a logo asset as the default for this email (updates user_defaults and user_logo_assets).
+ * @param {string} email
+ * @param {string} storagePath - must be an asset path for this email
+ */
+export async function setDefaultLogo(email, storagePath) {
+  if (!client || !email || !storagePath) return
+  try {
+    const normalized = email.toLowerCase().trim()
+    const { error: updateAssets } = await client
+      .from('user_logo_assets')
+      .update({ is_default: false })
+      .eq('email', normalized)
+    if (updateAssets) console.error('[supabase] setDefaultLogo clear:', updateAssets.message)
+    const { error: setOne } = await client
+      .from('user_logo_assets')
+      .update({ is_default: true })
+      .eq('email', normalized)
+      .eq('storage_path', storagePath)
+    if (setOne) console.error('[supabase] setDefaultLogo set:', setOne.message)
+    const current = await getUserDefaults(normalized)
+    await upsertUserDefaults(normalized, {
+      mode: current?.mode || 'logo',
+      text: current?.text ?? '',
+      template: current?.template || 'diagonal-center',
+      scope: current?.scope || 'all-pages',
+      logo_storage_path: storagePath,
+    })
+  } catch (err) {
+    console.error('[supabase] setDefaultLogo:', err.message)
+  }
+}
+
+/**
+ * Upload default logo to Storage and register as asset with setAsDefault.
+ * Kept for backward compatibility; now uses saveLogoAsset.
  * @param {string} email
  * @param {Buffer} buffer
  * @param {string} contentType
  * @returns {Promise<string | null>} storage path or null
  */
 export async function saveDefaultLogo(email, buffer, contentType) {
-  if (!client) return null
-  try {
-    const prefix = sanitizeEmailForPath(email)
-    const ext = (contentType || '').toLowerCase().includes('png') ? 'png' : 'jpg'
-    const storagePath = `${DEFAULT_LOGOS_PREFIX}/${prefix}/logo.${ext}`
-    const { error } = await client.storage.from(BUCKET).upload(storagePath, buffer, {
-      contentType: contentType || 'image/png',
-      upsert: true,
-    })
-    if (error) {
-      console.error('[supabase] saveDefaultLogo:', error.message)
-      return null
-    }
-    return storagePath
-  } catch (err) {
-    console.error('[supabase] saveDefaultLogo:', err.message)
-    return null
-  }
+  return saveLogoAsset(email, buffer, contentType, { setAsDefault: true })
 }
 
 /**
@@ -247,7 +348,7 @@ export async function getUserDefaults(email) {
   if (!client) return null
   try {
     const supabaseHost = url ? new URL(url).hostname : 'none'
-    const { data, error } = await client.from('user_defaults').select('mode, text_value, template, scope, logo_storage_path').ilike('email', email).maybeSingle()
+    const { data, error } = await client.from('user_defaults').select('mode, text_value, template, scope, logo_storage_path, updated_at').ilike('email', email).maybeSingle()
     if (error) {
       console.error('[supabase] getUserDefaults error:', error.message, 'code:', error.code)
       return null
@@ -262,6 +363,7 @@ export async function getUserDefaults(email) {
       template: data.template || 'diagonal-center',
       scope: data.scope || 'all-pages',
       logo_storage_path: data.logo_storage_path || undefined,
+      updated_at: data.updated_at || undefined,
     }
   } catch (err) {
     console.error('[supabase] getUserDefaults:', err.message)

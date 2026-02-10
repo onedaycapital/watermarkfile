@@ -123,12 +123,20 @@ function StepTile({
   )
 }
 
+export interface LogoAsset {
+  id: string
+  storage_path: string
+  created_at: string | null
+  is_default: boolean
+}
+
 interface AttractiveToolCardProps {
   onWatermarkRequest: (files: File[], options: WatermarkOptions, extras?: { emailMeFiles: boolean }) => void
   disabled?: boolean
   loadedDefaults?: StoredDefaults | null
   onLoadDefaultsClick?: () => void
   onRequestSaveDefaults?: (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>, logoFile?: File) => void
+  onRefetchDefaults?: (email: string) => void
   userEmail?: string | null
 }
 
@@ -152,7 +160,7 @@ function hasValidDefaults(loadedDefaults: StoredDefaults | null | undefined): bo
   return !!(loadedDefaults && typeof loadedDefaults.mode === 'string' && typeof loadedDefaults.template === 'string' && typeof loadedDefaults.scope === 'string')
 }
 
-export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefaults, onLoadDefaultsClick, onRequestSaveDefaults, userEmail }: AttractiveToolCardProps) {
+export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefaults, onLoadDefaultsClick, onRequestSaveDefaults, onRefetchDefaults, userEmail }: AttractiveToolCardProps) {
   const [files, setFiles] = useState<File[]>([])
   const [mode, setMode] = useState<WatermarkMode>(() => getInitialMode(loadedDefaults))
   const [text, setText] = useState(() => getInitialText(loadedDefaults))
@@ -165,6 +173,9 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
   const [emailMeFiles, setEmailMeFiles] = useState(false)
   const [saveAsDefaultStep1, setSaveAsDefaultStep1] = useState(() => hasValidDefaults(loadedDefaults))
   const [saveAsDefaultStep2, setSaveAsDefaultStep2] = useState(() => hasValidDefaults(loadedDefaults))
+  const [logoAssets, setLogoAssets] = useState<LogoAsset[]>([])
+  const [assetPickerOpen, setAssetPickerOpen] = useState(false)
+  const [assetPickerLoading, setAssetPickerLoading] = useState<string | null>(null)
   const lastAppliedDefaultsRef = useRef<StoredDefaults | null>(null)
 
   // Logo preview: create object URL when logo file is set, revoke on change/unmount
@@ -210,7 +221,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
 
     if (modeVal === 'logo' && email) {
       setLogoFile(null)
-      const logoUrl = apiUrl(`/api/defaults/logo?email=${encodeURIComponent(email)}`)
+      const logoUrl = loadedDefaults.logo_url ? apiUrl(loadedDefaults.logo_url) : apiUrl(`/api/defaults/logo?email=${encodeURIComponent(email)}`)
       fetch(logoUrl, { credentials: 'include' })
         .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(`${r.status}`))))
         .then((blob) => new File([blob], 'default-logo.png', { type: blob.type || 'image/png' }))
@@ -222,6 +233,48 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
 
     return () => { cancelled = true }
   }, [loadedDefaults, userEmail])
+
+  const logoEmail = (loadedDefaults?.email || userEmail)?.trim().toLowerCase()
+
+  useEffect(() => {
+    if (mode !== 'logo' || !logoEmail) {
+      setLogoAssets([])
+      return
+    }
+    let cancelled = false
+    fetch(apiUrl(`/api/defaults/logo-assets?email=${encodeURIComponent(logoEmail)}`), { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : { assets: [] }))
+      .then((data) => { if (!cancelled) setLogoAssets(Array.isArray(data?.assets) ? data.assets : []) })
+      .catch(() => { if (!cancelled) setLogoAssets([]) })
+    return () => { cancelled = true }
+  }, [mode, logoEmail])
+
+  const handleUseAssetForRun = (storagePath: string) => {
+    if (!logoEmail) return
+    setAssetPickerLoading(storagePath)
+    const url = apiUrl(`/api/defaults/logo?email=${encodeURIComponent(logoEmail)}&path=${encodeURIComponent(storagePath)}`)
+    fetch(url, { credentials: 'include' })
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(`${r.status}`))))
+      .then((blob) => new File([blob], 'logo.png', { type: blob.type || 'image/png' }))
+      .then((file) => { setLogoFile(file); setAssetPickerOpen(false) })
+      .catch(() => {})
+      .finally(() => setAssetPickerLoading(null))
+  }
+
+  const handleSetAssetAsDefault = (storagePath: string) => {
+    if (!logoEmail || !onRefetchDefaults) return
+    setAssetPickerLoading(storagePath)
+    fetch(apiUrl('/api/defaults/logo/set-default'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email: logoEmail, storage_path: storagePath }),
+    })
+      .then((r) => (r.ok ? undefined : Promise.reject(new Error('Failed'))))
+      .then(() => { onRefetchDefaults(logoEmail); setAssetPickerOpen(false) })
+      .catch(() => {})
+      .finally(() => setAssetPickerLoading(null))
+  }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const items = Array.from(e.target.files || [])
@@ -272,6 +325,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
   }
 
   return (
+    <>
     <section className="w-full max-w-[52rem] md:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-w-0" aria-label="Watermark tool">
       <div className="rounded-3xl border border-slate-200/90 bg-white shadow-card-accent overflow-hidden min-w-0">
         <div className="px-4 py-4 md:px-8 md:py-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 via-violet-50/50 to-slate-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -337,6 +391,15 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                         className="text-xs file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-violet-100 file:text-violet-700 file:text-xs file:font-medium file:shadow-sm"
                       />
                     </label>
+                    {logoAssets.length >= 2 && (
+                      <button
+                        type="button"
+                        onClick={() => setAssetPickerOpen(true)}
+                        className="text-xs font-semibold text-violet-600 hover:text-violet-700 underline underline-offset-2 text-left"
+                      >
+                        Select from your assets
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -529,5 +592,67 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
         </div>
       </div>
     </section>
+
+    {assetPickerOpen && logoAssets.length >= 2 && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+        onClick={() => setAssetPickerOpen(false)}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Select logo from your assets"
+      >
+        <div
+          className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-800">Select from your assets</h3>
+            <button
+              type="button"
+              onClick={() => setAssetPickerOpen(false)}
+              className="text-slate-400 hover:text-slate-600 p-1 rounded"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
+          <ul className="p-4 overflow-y-auto flex-1 space-y-3">
+            {logoAssets.map((asset) => (
+              <li key={asset.id} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 bg-slate-50/50">
+                <img
+                  src={apiUrl(`/api/defaults/logo?email=${encodeURIComponent(logoEmail!)}&path=${encodeURIComponent(asset.storage_path)}`)}
+                  alt=""
+                  className="w-14 h-14 rounded-lg object-contain border border-slate-200 bg-white"
+                />
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-medium text-slate-600">{asset.is_default ? 'Default' : 'Asset'}</span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <button
+                    type="button"
+                    disabled={!!assetPickerLoading}
+                    onClick={() => handleUseAssetForRun(asset.storage_path)}
+                    className="text-xs font-semibold text-violet-600 hover:text-violet-700 disabled:opacity-50"
+                  >
+                    {assetPickerLoading === asset.storage_path ? '…' : 'Use for this run'}
+                  </button>
+                  {!asset.is_default && (
+                    <button
+                      type="button"
+                      disabled={!!assetPickerLoading}
+                      onClick={() => handleSetAssetAsDefault(asset.storage_path)}
+                      className="text-xs font-semibold text-slate-600 hover:text-slate-800 disabled:opacity-50"
+                    >
+                      {assetPickerLoading === asset.storage_path ? '…' : 'Set as default'}
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    )}
+    </>
   )
 }

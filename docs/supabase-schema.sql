@@ -48,6 +48,28 @@ CREATE TABLE IF NOT EXISTS public.user_defaults (
 -- If table already exists, add column (run once):
 -- ALTER TABLE public.user_defaults ADD COLUMN IF NOT EXISTS logo_storage_path text;
 
+-- Logo assets per user: each uploaded logo is stored; one can be the current default (user_defaults.logo_storage_path).
+CREATE TABLE IF NOT EXISTS public.user_logo_assets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email text NOT NULL,
+  storage_path text NOT NULL,
+  is_default boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_logo_assets_email ON public.user_logo_assets (email);
+-- At most one default per email:
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_logo_assets_email_default ON public.user_logo_assets (email) WHERE is_default = true;
+
+-- If table already exists (run once): create user_logo_assets and RLS as above; no backfill needed.
+
+ALTER TABLE public.user_logo_assets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Service role only on user_logo_assets" ON public.user_logo_assets;
+CREATE POLICY "Service role only on user_logo_assets"
+  ON public.user_logo_assets FOR ALL
+  USING (false)
+  WITH CHECK (false);
+
 -- RLS: only service role (backend) can read/write
 ALTER TABLE public.user_stats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.uploads ENABLE ROW LEVEL SECURITY;
