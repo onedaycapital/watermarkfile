@@ -83,6 +83,7 @@ export function AttractiveView({
                 onDefaultsApplied={onDefaultsApplied}
                 onLoadDefaultsClick={onLoadDefaultsClick}
                 onRequestSaveDefaults={onRequestSaveDefaults}
+                userEmail={userEmail ?? undefined}
               />
               <div className="flex flex-wrap justify-center gap-x-5 gap-y-1.5 text-sm text-white/85">
                 <span className="text-white/90 font-medium">Used by</span>

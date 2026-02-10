@@ -116,9 +116,10 @@ interface AttractiveToolCardProps {
   onDefaultsApplied?: () => void
   onLoadDefaultsClick?: () => void
   onRequestSaveDefaults?: (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>, logoFile?: File) => void
+  userEmail?: string | null
 }
 
-export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefaults, onDefaultsApplied, onLoadDefaultsClick, onRequestSaveDefaults }: AttractiveToolCardProps) {
+export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefaults, onDefaultsApplied, onLoadDefaultsClick, onRequestSaveDefaults, userEmail }: AttractiveToolCardProps) {
   const [files, setFiles] = useState<File[]>([])
   const [mode, setMode] = useState<WatermarkMode>(() => getStoredDefaults()?.mode ?? 'text')
   const [text, setText] = useState(() => getStoredDefaults()?.text ?? '')
@@ -149,7 +150,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     return () => URL.revokeObjectURL(url)
   }, [logoFile])
 
-  // Apply loaded defaults (step 1: logo or text; step 2: template/scope). Show checkmarks to indicate defaults are loaded. Logo: fetch with retry, check res.ok, clear onDefaultsApplied only after fetch completes.
+  // Apply loaded defaults (step 1: logo or text; step 2: template/scope). Show checkmarks to indicate defaults are loaded. Logo: fetch by logo_url or by userEmail when mode is logo; retry once; clear onDefaultsApplied after fetch completes.
   useEffect(() => {
     if (!loadedDefaults) return
     let cancelled = false
@@ -160,10 +161,13 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     setSaveAsDefaultStep1(true)
     setSaveAsDefaultStep2(true)
     const clear = onDefaultsApplied
-    if (loadedDefaults.mode === 'logo' && loadedDefaults.logo_url) {
-      const logoUrl = loadedDefaults.logo_url.startsWith('/') ? apiUrl(loadedDefaults.logo_url) : loadedDefaults.logo_url
+    const email = userEmail?.trim().toLowerCase()
+    const logoUrlFromDefaults = loadedDefaults.logo_url
+      ? (loadedDefaults.logo_url.startsWith('/') ? apiUrl(loadedDefaults.logo_url) : loadedDefaults.logo_url)
+      : (email ? apiUrl(`/api/defaults/logo?email=${encodeURIComponent(email)}`) : null)
+    if (loadedDefaults.mode === 'logo' && logoUrlFromDefaults) {
       const tryFetch = (attempt: number): Promise<void> =>
-        fetch(logoUrl, { credentials: 'include' })
+        fetch(logoUrlFromDefaults, { credentials: 'include' })
           .then((r) => {
             if (!r.ok) throw new Error(`Logo ${r.status}`)
             return r.blob().then((blob) => {
@@ -191,7 +195,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
       cancelled = true
       clearTimeout(t)
     }
-  }, [loadedDefaults, onDefaultsApplied])
+  }, [loadedDefaults, onDefaultsApplied, userEmail])
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const items = Array.from(e.target.files || [])
