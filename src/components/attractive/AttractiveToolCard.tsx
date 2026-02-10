@@ -361,15 +361,38 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
 
             <StepTile step={4} title="Get files" accent={STEP_ACCENTS[3]}>
               <div className="flex flex-col justify-center flex-1 gap-3">
-                <ToggleGroup
-                  label="How do you want your files?"
-                  value={emailMeFiles ? 'email' : 'download'}
-                  onChange={(v) => setEmailMeFiles(v === 'email')}
-                  options={[
-                    { value: 'download', label: 'Download now', icon: <IconDownload className="w-4 h-4" /> },
-                    { value: 'email', label: 'Email me files' },
-                  ]}
-                />
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">How do you want your files?</span>
+                  <div
+                    role="group"
+                    aria-label="How do you want your files?"
+                    className="inline-flex w-full rounded-lg border border-slate-200 bg-slate-100/60 p-1 gap-px"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setEmailMeFiles(false)}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors duration-150 ${
+                        !emailMeFiles
+                          ? 'bg-white text-violet-600'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <IconDownload className="w-3.5 h-3.5 shrink-0" />
+                      Download now
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEmailMeFiles(true)}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors duration-150 ${
+                        emailMeFiles
+                          ? 'bg-white text-violet-600'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      Email me files
+                    </button>
+                  </div>
+                </div>
                 {(!canSubmit || disabledHint) && (
                   <p className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2" role="alert">
                     {disabledHint || (files.length === 0
