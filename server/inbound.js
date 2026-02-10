@@ -1,6 +1,6 @@
 /**
  * Process Resend inbound email (email.received): look up user defaults, fetch attachments,
- * watermark with text only, return reply payload for sendReplyWithAttachments.
+ * watermark with user defaults (text or logo), return reply payload for sendReplyWithAttachments.
  */
 
 const SUPPORTED_IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.webp']
@@ -15,17 +15,18 @@ function parseSenderEmail(from) {
 }
 
 /**
- * Process inbound email webhook payload. Fetches attachments via Resend API, watermarks with user defaults (text only).
+ * Process inbound email webhook payload. Fetches attachments via Resend API, watermarks with user defaults (text or logo).
  * @param {object} opts
  * @param {object} opts.body - Resend webhook body { type, data: { from, email_id, attachments: [{ id, filename, content_type }] } }
  * @param {string} opts.appOrigin - e.g. https://www.watermarkfile.com
- * @param {(email: string) => Promise<{ mode, text, template, scope } | null>} opts.getUserDefaults
+ * @param {(email: string) => Promise<{ mode, text, template, scope, logo_storage_path?: string } | null>} opts.getUserDefaults
+ * @param {(storagePath: string) => Promise<{ buffer: Buffer, contentType: string } | null>} [opts.getDefaultLogoBuffer] - required when defaults.mode === 'logo'
  * @param {(buffer: Buffer, opts: object) => Promise<Buffer>} opts.watermarkPdf
  * @param {(buffer: Buffer, opts: object) => Promise<{ buffer: Buffer, contentType: string, ext: string }>} opts.watermarkImage
  * @returns {Promise<{ to: string, subject: string, text: string, html?: string, attachments?: { filename: string, content: Buffer }[] }>}
  */
 export async function processInboundEmail(opts) {
-  const { body, appOrigin, getUserDefaults, watermarkPdf, watermarkImage } = opts
+  const { body, appOrigin, getUserDefaults, getDefaultLogoBuffer, watermarkPdf, watermarkImage } = opts
   const from = body?.data?.from
   const emailId = body?.data?.email_id
   const attachmentMeta = body?.data?.attachments || []
@@ -45,13 +46,27 @@ export async function processInboundEmail(opts) {
     }
   }
 
+  // Resolve logo when mode is logo (fetch from storage)
+  let optsForWatermark = { mode: defaults.mode || 'text', text: defaults.text || 'Watermark', template: defaults.template || 'diagonal-center', scope: defaults.scope || 'all-pages', logoFile: null }
   if (defaults.mode === 'logo') {
-    return {
-      to: senderEmail,
-      subject: 'WatermarkFile – use text default for email',
-      text: `Your saved default is logo mode. Email-in supports text watermarks only. Visit ${appOrigin} to set a text default, or use the website for logo watermarks.`,
-      html: `<p>Your saved default is logo mode. Email-in supports text watermarks only.</p><p>Visit <a href="${appOrigin}">${appOrigin}</a> to set a text default, or use the website for logo watermarks.</p><p>— WatermarkFile</p>`,
+    if (!getDefaultLogoBuffer || !defaults.logo_storage_path) {
+      return {
+        to: senderEmail,
+        subject: 'WatermarkFile – no default logo',
+        text: `Your default is set to logo but no logo is saved. Visit ${appOrigin} to upload a logo and save it as default, or switch to a text default.`,
+        html: `<p>Your default is set to logo but no logo is saved.</p><p>Visit <a href="${appOrigin}">${appOrigin}</a> to upload a logo and save it as default, or switch to a text default.</p><p>— WatermarkFile</p>`,
+      }
     }
+    const logoResult = await getDefaultLogoBuffer(defaults.logo_storage_path)
+    if (!logoResult?.buffer) {
+      return {
+        to: senderEmail,
+        subject: 'WatermarkFile – could not load logo',
+        text: `We couldn't load your saved logo. Visit ${appOrigin} to re-upload and save as default.`,
+        html: `<p>We couldn't load your saved logo.</p><p>Visit <a href="${appOrigin}">${appOrigin}</a> to re-upload and save as default.</p><p>— WatermarkFile</p>`,
+      }
+    }
+    optsForWatermark = { mode: 'logo', text: '', template: defaults.template || 'diagonal-center', scope: defaults.scope || 'all-pages', logoFile: { buffer: logoResult.buffer, mimetype: logoResult.contentType || 'image/png' } }
   }
 
   const apiKey = (process.env.RESEND_API_KEY || '').toString().trim()
@@ -101,7 +116,6 @@ export async function processInboundEmail(opts) {
   }
 
   const attachments = []
-  const optsNoLogo = { mode: 'text', text: defaults.text || 'Watermark', template: defaults.template, scope: defaults.scope, logoFile: null }
   const metaById = new Map(attachmentMeta.map((a) => [a.id, a]))
 
   for (const att of listResult) {
@@ -123,10 +137,10 @@ export async function processInboundEmail(opts) {
       const buffer = Buffer.from(await resp.arrayBuffer())
 
       if (ext === '.pdf') {
-        const out = await watermarkPdf(buffer, optsNoLogo)
+        const out = await watermarkPdf(buffer, optsForWatermark)
         attachments.push({ filename: filename.replace(/\.[^.]+$/, '') + '_watermarked.pdf', content: out })
       } else if (SUPPORTED_IMAGE_EXT.includes(ext)) {
-        const out = await watermarkImage(buffer, optsNoLogo)
+        const out = await watermarkImage(buffer, optsForWatermark)
         const outName = filename.replace(/\.[^.]+$/, '') + '_watermarked' + (out.ext || '.png')
         attachments.push({ filename: outName, content: out.buffer })
       }

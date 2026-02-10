@@ -290,6 +290,7 @@ app.post('/api/webhooks/inbound-email', async (req, res) => {
       body,
       appOrigin: APP_ORIGIN,
       getUserDefaults: (email) => (isSupabaseConfigured() ? getUserDefaults(email) : Promise.resolve(null)),
+      getDefaultLogoBuffer: isSupabaseConfigured() ? getDefaultLogoBuffer : undefined,
       watermarkPdf: (buffer, opts) => watermarkPdf(buffer, opts),
       watermarkImage: (buffer, opts) => watermarkImage(buffer, opts),
     })

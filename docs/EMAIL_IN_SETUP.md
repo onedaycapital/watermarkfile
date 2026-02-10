@@ -7,10 +7,10 @@ Users can **email files as attachments** to your inbound address and receive **w
 ## Flow
 
 1. User visits the site (e.g. **www.watermarkfile.com**), sets **default watermark** (text, template, scope) and saves them (optionally with the same email they’ll use to send).
-2. User sends an email to your **inbound address** (e.g. **submit@watermarkfile.com**) with **PDF or image attachments** (JPG, PNG, WebP).
+2. User sends an email to your **inbound address** (e.g. **submit@doc.watermarkfile.com**) with **PDF or image attachments** (JPG, PNG, WebP).
 3. Backend receives the email (via Resend Inbound), looks up **saved defaults** for the sender email, watermarks each attachment, and **replies** with the watermarked files attached.
 
-**Note:** Email-in supports **text watermarks only**. Logo defaults must be used on the website.
+**Note:** Email-in supports both **text** and **logo** defaults. For logo, you must save a default logo on the website first; email-in uses that saved logo.
 
 ---
 
@@ -62,7 +62,7 @@ CREATE POLICY "Service role only on user_defaults"
    Example:  
    `https://watermarkfile-production-f560.up.railway.app/api/webhooks/inbound-email`
 
-3. Create an **inbound address** (e.g. **submit@watermarkfile.com**) or use the one Resend provides for your domain.
+3. Create an **inbound address** (e.g. **submit@doc.watermarkfile.com**) or use the one Resend provides for your domain.
 4. (Optional) In Resend → **Webhooks**, create a webhook for **email.received** pointing to the same URL and copy the **Signing secret**; you can later add `RESEND_WEBHOOK_SECRET` for verification.
 
 ---
@@ -72,15 +72,15 @@ CREATE POLICY "Service role only on user_defaults"
 Tell users:
 
 - **First time:** Go to the site and set your default watermark (text, template, scope) and save (optionally with the email you’ll use to send).
-- **Then:** Send an email to **submit@watermarkfile.com** (or your inbound address) with PDF or image attachments. You’ll get a reply with the same files, watermarked with your defaults.
+- **Then:** Send an email to **submit@doc.watermarkfile.com** (or your inbound address) with PDF or image attachments. You’ll get a reply with the same files, watermarked with your defaults.
 
-The footer on the site already mentions **submit@watermarkfile.com** for this flow.
+The footer on the site already mentions **submit@doc.watermarkfile.com** for this flow.
 
 ---
 
 ## 5. Troubleshooting
 
 - **“Set your defaults first”** – Sender email has no row in **user_defaults**. They need to save defaults on the site (with the same email they use to send).
-- **“Use text default for email”** – Saved default is logo mode; email-in only supports text. They can set a text default or use the website for logo.
+- **“No default logo” / “could not load logo”** – Default is logo but no logo is saved or it couldn’t be loaded. Upload a logo on the site and save as default, or switch to a text default.
 - **“No supported files”** – No PDF or image attachments, or download failed. Ask them to attach only PDF / JPG / PNG / WebP.
 - **No reply at all** – Check Railway logs for `[inbound]` errors; ensure `RESEND_API_KEY` is set and the webhook URL is reachable (HTTPS). Resend must be able to POST to your backend.
