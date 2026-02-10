@@ -72,34 +72,27 @@ export async function processInboundEmail(opts) {
     }
   }
 
-  let Resend
-  try {
-    const mod = await import('resend')
-    Resend = mod.Resend || mod.default
-  } catch (e) {
-    console.error('[inbound] resend package not available:', e.message)
-    return { to: senderEmail, subject: 'WatermarkFile – error', text: 'Service temporarily unavailable.' }
-  }
-
-  const resend = new Resend(apiKey)
+  // Resend SDK has a bug (reading .attachments from undefined), so call REST API directly
+  const resendBase = 'https://api.resend.com'
+  const authHeader = { Authorization: `Bearer ${apiKey}` }
   let listResult = []
   try {
-    const out = await resend.emails.receiving.attachments.list({ emailId })
-    // API returns { data: [...] }; some SDK versions may expose .attachments
-    const raw = out?.data ?? out?.attachments
+    const listRes = await fetch(`${resendBase}/emails/receiving/${encodeURIComponent(emailId)}/attachments`, { headers: authHeader })
+    if (!listRes.ok) throw new Error(`list ${listRes.status}`)
+    const listJson = await listRes.json()
+    const raw = listJson?.data
     listResult = Array.isArray(raw) ? raw : []
   } catch (e) {
     console.error('[inbound] List attachments failed:', e.message)
-    // Fallback: fetch each attachment by id from webhook meta
-    if (attachmentMeta.length > 0) {
-      for (const meta of attachmentMeta) {
-        try {
-          const one = await resend.emails.receiving.attachments.get({ emailId, id: meta.id })
-          const att = one?.data ?? one
-          if (att?.download_url || att?.url) listResult.push(att)
-        } catch (err) {
-          console.warn('[inbound] Get attachment failed', meta.id, err.message)
-        }
+    // Fallback: fetch each attachment by id via REST API
+    for (const meta of attachmentMeta) {
+      try {
+        const getRes = await fetch(`${resendBase}/emails/receiving/${encodeURIComponent(emailId)}/attachments/${encodeURIComponent(meta.id)}`, { headers: authHeader })
+        if (!getRes.ok) continue
+        const att = await getRes.json()
+        if (att?.download_url || att?.url) listResult.push(att)
+      } catch (err) {
+        console.warn('[inbound] Get attachment failed', meta.id, err.message)
       }
     }
     if (listResult.length === 0) {
