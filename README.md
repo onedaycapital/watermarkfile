@@ -8,7 +8,7 @@ Simple, sleek file watermarking. No sign-up required to start.
 - **Tool card** — Upload (PDF/JPG/PNG), choose Logo or Text watermark, template (Diagonal Center / Repeating Pattern / Footer Tag), scope (All pages / First page only), then “Watermark files”.
 - **Progress pipeline** — Intake → Processing → Ready with file counter.
 - **Results** — Per-file download, optional “Email me the watermarked files”, “Save as default”, and email capture modal only after first run.
-- **Email-in** — CTA: “Send files to submit@watermarkfile.com to get them back watermarked.”
+- **Email-in** — CTA: “Send files to submit@doc.watermarkfile.com to get them back watermarked.”
 - **Trust** — “Files are auto-deleted after 24 hours.”
 
 ## Run locally

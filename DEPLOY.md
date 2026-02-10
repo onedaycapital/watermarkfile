@@ -60,7 +60,7 @@ Magic-link emails are sent by the **backend on Railway**, not by Vercel. To send
 
 Full step-by-step and SMTP examples: **docs/EMAIL_PRODUCTION.md**.
 
-For **email-in** (users email files to e.g. **submit@watermarkfile.com** and get watermarked files back): set **RESEND_API_KEY** and Supabase vars on Railway, run the **user_defaults** table (see **docs/supabase-schema.sql**), and configure Resend Inbound webhook → **docs/EMAIL_IN_SETUP.md**.
+For **email-in** (users email files to e.g. **submit@doc.watermarkfile.com** and get watermarked files back): set **RESEND_API_KEY** and Supabase vars on Railway, run the **user_defaults** table (see **docs/supabase-schema.sql**), and configure Resend Inbound webhook → **docs/EMAIL_IN_SETUP.md**.
 
 ---
 

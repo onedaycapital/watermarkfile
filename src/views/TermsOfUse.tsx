@@ -87,7 +87,7 @@ export function TermsOfUse() {
 
             <section>
               <h2 className="text-lg font-semibold text-white mt-8 mb-2">11. Contact</h2>
-              <p>Questions about these Terms? Contact us at <a href="mailto:submit@watermarkfile.com" className="text-violet-300 hover:text-white underline underline-offset-2">submit@watermarkfile.com</a>.</p>
+              <p>Questions about these Terms? Contact us at <a href="mailto:submit@doc.watermarkfile.com" className="text-violet-300 hover:text-white underline underline-offset-2">submit@doc.watermarkfile.com</a>.</p>
             </section>
           </div>
         </main>

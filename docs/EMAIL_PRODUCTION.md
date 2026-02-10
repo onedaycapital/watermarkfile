@@ -3,7 +3,7 @@
 Magic-link emails and **email-in reply emails** are sent by the **backend**, which runs on **Railway**. Configure email there, not on Vercel. Vercel only serves the frontend.
 
 - **Magic link:** User gets an email with a link; clicking it opens the app and lets them download.
-- **Email-in:** User emails files to your inbound address (e.g. **submit@watermarkfile.com**); they get a reply with watermarked files. See [EMAIL_IN_SETUP.md](./EMAIL_IN_SETUP.md).
+- **Email-in:** User emails files to your inbound address (e.g. **submit@doc.watermarkfile.com**); they get a reply with watermarked files. See [EMAIL_IN_SETUP.md](./EMAIL_IN_SETUP.md).
 
 ---
 
