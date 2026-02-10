@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { AttractiveView } from './views/AttractiveView'
 import { EmailCaptureModal } from './components/EmailCaptureModal'
 import { EmailPromptModal } from './components/EmailPromptModal'
-import type { PipelineState, ProcessedFile, WatermarkOptions } from './types'
+import type { PipelineState, ProcessedFile, WatermarkOptions, WatermarkMode, Template, Scope } from './types'
 import type { StoredDefaults } from './lib/defaults'
 import { setStoredDefaults, getStoredDefaults } from './lib/defaults'
 import { triggerDownload } from './lib/download'
@@ -138,12 +138,12 @@ function App() {
             /* ignore */
           }
         }
-        const mode = data.mode === 'logo' ? 'logo' : 'text'
-        const template = ['diagonal-center', 'repeating-pattern', 'footer-tag'].includes(data.template) ? data.template : 'diagonal-center'
-        const scope = data.scope === 'first-page-only' ? 'first-page-only' : 'all-pages'
+        const mode: WatermarkMode = data.mode === 'logo' ? 'logo' : 'text'
+        const template: Template = ['diagonal-center', 'repeating-pattern', 'footer-tag'].includes(data.template) ? data.template : 'diagonal-center'
+        const scope: Scope = data.scope === 'first-page-only' ? 'first-page-only' : 'all-pages'
         if (data.mode != null && data.template != null && data.scope != null) {
           const emailNorm = data.email?.trim().toLowerCase()
-          const next = {
+          const next: StoredDefaults = {
             mode,
             text: typeof data.text === 'string' ? data.text : '',
             template,
@@ -535,10 +535,10 @@ function App() {
       } catch {
         /* ignore */
       }
-      const mode = data.mode === 'logo' ? 'logo' : 'text'
-      const template = ['diagonal-center', 'repeating-pattern', 'footer-tag'].includes(data.template) ? data.template : 'diagonal-center'
-      const scope = data.scope === 'first-page-only' ? 'first-page-only' : 'all-pages'
-      const next = {
+      const mode: WatermarkMode = data.mode === 'logo' ? 'logo' : 'text'
+      const template: Template = ['diagonal-center', 'repeating-pattern', 'footer-tag'].includes(data.template) ? data.template : 'diagonal-center'
+      const scope: Scope = data.scope === 'first-page-only' ? 'first-page-only' : 'all-pages'
+      const next: StoredDefaults = {
         mode,
         text: typeof data.text === 'string' ? data.text : '',
         template,
