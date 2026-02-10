@@ -107,6 +107,24 @@ app.post('/api/auth/send-magic-link', async (req, res) => {
     if (Array.isArray(pendingDelivery) && pendingDelivery.length > 0) {
       setPendingDelivery(email, pendingDelivery)
     }
+    // Record user and file count the minute they submit on page 2 (first-time user)
+    if (isSupabaseConfigured()) {
+      const fileCount = Array.isArray(pendingDelivery) ? pendingDelivery.length : 0
+      upsertUserStats(email, fileCount).catch((err) => console.error('[supabase] upsertUserStats (send-magic-link):', err.message))
+      // Save cached originals (from first run without email) to Storage and uploads table
+      if (Array.isArray(pendingDelivery) && pendingDelivery.length > 0) {
+        for (const it of pendingDelivery) {
+          const fileToken = (it.token || (it.downloadUrl || '').replace(/^.*\/api\/download\//, '').replace(/\?.*$/, '')).trim()
+          if (!fileToken) continue
+          const storeEntry = store.get(fileToken)
+          if (storeEntry?.original) {
+            const { buffer: origBuffer, filename: origFilename, contentType: origContentType } = storeEntry.original
+            saveFileToStorage(email, origFilename, origBuffer, origContentType).catch((err) => console.error('[supabase] saveFileToStorage (cached):', err.message))
+            delete storeEntry.original
+          }
+        }
+      }
+    }
     const magicLinkUrl = `${APP_ORIGIN}/?magic=${token}`
     await sendMagicLinkEmail({ to: email, magicLinkUrl, appOrigin: APP_ORIGIN })
     res.json({ ok: true, message: 'Magic link sent' })
@@ -146,6 +164,7 @@ app.post('/api/auth/verify-magic-link', (req, res) => {
       recordUploadBatch(email, { successCount, errorCount: 0, failReasons: [] })
       recordSuccessDownloads(email, successCount)
       clearPendingDelivery(email)
+      // user_stats already updated in send-magic-link when they submitted on page 2; avoid double-count
     }
     res.json({
       ok: true,
@@ -204,6 +223,7 @@ app.post('/api/send-results-email', async (req, res) => {
       html: `<p>Here are your ${attachments.length} watermarked file(s).</p><p>— WatermarkFile</p>`,
       attachments,
     })
+    // user_stats already updated in POST /api/watermark when request included email; avoid double-count
     res.json({ ok: true, sent: attachments.length })
   } catch (err) {
     console.error('[send-results-email]', err)
@@ -220,7 +240,7 @@ app.get('/api/download/:token', (req, res) => {
   res.setHeader('Content-Type', entry.contentType)
   res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(entry.filename)}"`)
   res.send(entry.buffer)
-  store.delete(req.params.token)
+  // Token is left in store until cleanup (1h); allows both instant download and later button click
 })
 
 // POST /api/watermark — multipart: files[], mode, text, template, scope, logo (file optional)
@@ -277,21 +297,29 @@ app.post('/api/watermark', upload.fields([
 
         name += outExt
         const token = uuidv4()
-        store.set(token, {
+        const emailForSupabase = (req.body.email || '').toString().trim().toLowerCase()
+        const hasEmail = emailForSupabase && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailForSupabase)
+        const entry = {
           buffer,
           filename: name,
           contentType,
           createdAt: Date.now(),
-        })
+        }
+        if (!hasEmail && isSupabaseConfigured()) {
+          entry.original = {
+            buffer: Buffer.from(file.buffer),
+            filename: file.originalname,
+            contentType: file.mimetype,
+          }
+        }
+        store.set(token, entry)
         results.push({
           id,
           name,
           status: 'success',
           downloadUrl: `/api/download/${token}`,
         })
-        // Persist original (un-watermarked) file to Supabase Storage when configured (fire-and-forget)
-        const emailForSupabase = (req.body.email || '').toString().trim().toLowerCase()
-        if (emailForSupabase && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailForSupabase) && isSupabaseConfigured()) {
+        if (hasEmail && isSupabaseConfigured()) {
           saveFileToStorage(emailForSupabase, file.originalname, file.buffer, file.mimetype).catch((err) => console.error('[supabase] saveFileToStorage:', err.message))
         }
       } catch (err) {

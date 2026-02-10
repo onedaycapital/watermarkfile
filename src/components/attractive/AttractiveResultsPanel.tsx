@@ -1,5 +1,6 @@
 import type { ProcessedFile } from '../../types'
 import { track, AnalyticsEvents, getFileExtension } from '../../lib/analytics'
+import { triggerDownload } from '../../lib/download'
 import { ConfirmEmailForDownload } from '../ConfirmEmailForDownload'
 import { IconCheck, IconDownload, IconUpload } from './Icons'
 
@@ -68,20 +69,20 @@ export function AttractiveResultsPanel({
               <span className="text-sm text-slate-800 truncate font-medium">{f.name}</span>
               {f.status === 'success' && f.downloadUrl ? (
                 isVerified ? (
-                  <a
-                    href={f.downloadUrl}
-                    download={f.name}
+                  <button
+                    type="button"
                     onClick={() => {
                       track(AnalyticsEvents.DownloadClicked, {
                         file_name: f.name,
                         file_extension: getFileExtension(f.name),
                       })
+                      triggerDownload(f.downloadUrl, f.name)
                     }}
                     className="shrink-0 text-xs font-semibold px-3 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white hover:from-violet-600 hover:to-fuchsia-600 flex items-center gap-1.5 shadow-md shadow-violet-500/20 transition-all duration-200"
                   >
                     <IconDownload className="w-3.5 h-3.5" />
                     Download
-                  </a>
+                  </button>
                 ) : (
                   <span className="text-xs text-violet-600 font-medium">Confirm email above to download</span>
                 )

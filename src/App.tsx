@@ -182,7 +182,9 @@ function App() {
         form.append('text', options.text ?? '')
         form.append('template', options.template)
         form.append('scope', options.scope)
-        if (isVerified && userEmail) form.append('email', userEmail)
+        // Send email whenever we have it (verified, stored, or from confirm block) so backend can record usage in DB
+        const emailToSend = (userEmail || emailFromConfirmBlock.trim() || '').trim().toLowerCase() || null
+        if (emailToSend) form.append('email', emailToSend)
         if (options.mode === 'logo' && options.logoFile) {
           form.append('logo', options.logoFile)
         }
@@ -353,21 +355,23 @@ function App() {
     }
   }
 
-  async function saveDefaultsToApi(email: string, defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>) {
+  async function saveDefaultsToApi(email: string, defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>): Promise<void> {
     const normalized = email.trim().toLowerCase()
     const res = await fetch(apiUrl('/api/defaults'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: normalized, defaults }),
     })
-    if (res.ok) {
-      setStoredDefaults({
-        mode: defaults.mode,
-        text: defaults.text,
-        template: defaults.template,
-        scope: defaults.scope,
-      })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      throw new Error((data?.error as string) || res.statusText || 'Failed to save defaults')
     }
+    setStoredDefaults({
+      mode: defaults.mode,
+      text: defaults.text,
+      template: defaults.template,
+      scope: defaults.scope,
+    })
     try {
       localStorage.setItem(EMAIL_STORAGE_KEY, normalized)
     } catch {
@@ -416,6 +420,9 @@ function App() {
           track(AnalyticsEvents.SaveDefaultsSuccess)
           setPendingSaveDefaults(null)
         })
+        .catch((err) => {
+          alert(err instanceof Error ? err.message : 'Failed to save defaults')
+        })
         .finally(() => setSaveDefaultsLoading(false))
       return
     }
@@ -434,6 +441,8 @@ function App() {
       track(AnalyticsEvents.SaveDefaultsSuccess)
       setShowSaveDefaultsModal(false)
       setPendingSaveDefaults(null)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to save defaults')
     } finally {
       setSaveDefaultsLoading(false)
     }
