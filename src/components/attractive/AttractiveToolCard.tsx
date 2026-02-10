@@ -363,34 +363,42 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
               <div className="flex flex-col justify-center flex-1 gap-3">
                 <div className="flex flex-col gap-2">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">How do you want your files?</span>
-                  <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-col gap-2">
                     <div
                       role="group"
                       aria-label="How do you want your files?"
-                      className="inline-flex w-full rounded-lg border border-slate-200 bg-slate-100/60 p-1 gap-px"
+                      className="inline-flex w-full rounded-full bg-violet-200/90 p-1 gap-0.5 shadow-inner"
                     >
                       <button
                         type="button"
                         onClick={() => setEmailMeFiles(false)}
-                        className={`flex-1 py-2.5 rounded-md transition-colors duration-150 ${
-                          !emailMeFiles ? 'bg-white shadow-sm' : 'hover:bg-white/50'
+                        className={`flex-1 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+                          !emailMeFiles
+                            ? 'bg-violet-600 text-white shadow-md'
+                            : 'text-slate-600 hover:text-slate-800'
                         }`}
                         aria-pressed={!emailMeFiles}
                         aria-label="Download now"
-                      />
+                      >
+                        Download now
+                      </button>
                       <button
                         type="button"
                         onClick={() => setEmailMeFiles(true)}
-                        className={`flex-1 py-2.5 rounded-md transition-colors duration-150 ${
-                          emailMeFiles ? 'bg-white shadow-sm' : 'hover:bg-white/50'
+                        className={`flex-1 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+                          emailMeFiles
+                            ? 'bg-violet-600 text-white shadow-md'
+                            : 'text-slate-600 hover:text-slate-800'
                         }`}
                         aria-pressed={emailMeFiles}
                         aria-label="Email me files"
-                      />
+                      >
+                        Email me files
+                      </button>
                     </div>
-                    <div className="flex justify-between px-0.5 text-xs font-medium text-slate-600">
-                      <span className={!emailMeFiles ? 'text-violet-600' : ''}>Download now</span>
-                      <span className={emailMeFiles ? 'text-violet-600' : ''}>Email me files</span>
+                    <div className="flex flex-col gap-0.5 text-xs font-medium text-slate-600">
+                      <p className={!emailMeFiles ? 'text-violet-600 font-semibold' : ''}>Download now</p>
+                      <p className={emailMeFiles ? 'text-violet-600 font-semibold' : ''}>Email me files</p>
                     </div>
                   </div>
                 </div>
