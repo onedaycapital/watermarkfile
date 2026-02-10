@@ -49,7 +49,7 @@ export function AttractiveView({
   loadedDefaults,
   onDefaultsApplied,
   userEmail,
-  emailMeFilesChosen = false,
+  emailMeFilesChosen: _emailMeFilesChosen = false,
   resultsEmailSent = false,
 }: AttractiveViewProps) {
   const showResults = results.length > 0 && pipelineState === 'ready'

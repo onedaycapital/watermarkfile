@@ -21,9 +21,9 @@ interface AttractiveResultsPanelProps {
 export function AttractiveResultsPanel({
   files,
   isVerified = true,
-  onEmailToggle,
+  onEmailToggle: _onEmailToggle,
   emailSaved: _emailSaved,
-  emailDeliveryOn,
+  emailDeliveryOn: _emailDeliveryOn,
   onMagicLinkSent,
   onConfirmBlockEmailChange,
   onSaveDefaults,
