@@ -127,25 +127,44 @@ interface AttractiveToolCardProps {
   onWatermarkRequest: (files: File[], options: WatermarkOptions, extras?: { emailMeFiles: boolean }) => void
   disabled?: boolean
   loadedDefaults?: StoredDefaults | null
-  onDefaultsApplied?: () => void
   onLoadDefaultsClick?: () => void
   onRequestSaveDefaults?: (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>, logoFile?: File) => void
   userEmail?: string | null
 }
 
+function getInitialMode(loadedDefaults: StoredDefaults | null | undefined): WatermarkMode {
+  if (!loadedDefaults || typeof loadedDefaults.mode !== 'string') return 'text'
+  return clampMode(loadedDefaults.mode)
+}
+function getInitialText(loadedDefaults: StoredDefaults | null | undefined): string {
+  if (!loadedDefaults) return ''
+  return typeof loadedDefaults.text === 'string' ? loadedDefaults.text : ''
+}
+function getInitialTemplate(loadedDefaults: StoredDefaults | null | undefined): Template {
+  if (!loadedDefaults || typeof loadedDefaults.template !== 'string') return 'diagonal-center'
+  return clampTemplate(loadedDefaults.template)
+}
+function getInitialScope(loadedDefaults: StoredDefaults | null | undefined): Scope {
+  if (!loadedDefaults || typeof loadedDefaults.scope !== 'string') return 'all-pages'
+  return clampScope(loadedDefaults.scope)
+}
+function hasValidDefaults(loadedDefaults: StoredDefaults | null | undefined): boolean {
+  return !!(loadedDefaults && typeof loadedDefaults.mode === 'string' && typeof loadedDefaults.template === 'string' && typeof loadedDefaults.scope === 'string')
+}
+
 export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefaults, onLoadDefaultsClick, onRequestSaveDefaults, userEmail }: AttractiveToolCardProps) {
   const [files, setFiles] = useState<File[]>([])
-  const [mode, setMode] = useState<WatermarkMode>('text')
-  const [text, setText] = useState('')
+  const [mode, setMode] = useState<WatermarkMode>(() => getInitialMode(loadedDefaults))
+  const [text, setText] = useState(() => getInitialText(loadedDefaults))
   const [logoFile, setLogoFile] = useState<File | null>(null)
-  const [template, setTemplate] = useState<Template>('diagonal-center')
-  const [scope, setScope] = useState<Scope>('all-pages')
+  const [template, setTemplate] = useState<Template>(() => getInitialTemplate(loadedDefaults))
+  const [scope, setScope] = useState<Scope>(() => getInitialScope(loadedDefaults))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
   const [disabledHint, setDisabledHint] = useState<string | null>(null)
   const [emailMeFiles, setEmailMeFiles] = useState(false)
-  const [saveAsDefaultStep1, setSaveAsDefaultStep1] = useState(false)
-  const [saveAsDefaultStep2, setSaveAsDefaultStep2] = useState(false)
+  const [saveAsDefaultStep1, setSaveAsDefaultStep1] = useState(() => hasValidDefaults(loadedDefaults))
+  const [saveAsDefaultStep2, setSaveAsDefaultStep2] = useState(() => hasValidDefaults(loadedDefaults))
   const lastAppliedDefaultsRef = useRef<StoredDefaults | null>(null)
 
   // Logo preview: create object URL when logo file is set, revoke on change/unmount

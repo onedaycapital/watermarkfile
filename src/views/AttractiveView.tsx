@@ -26,7 +26,6 @@ export interface AttractiveViewProps {
   onStartOver: () => void
   onLoadDefaultsClick?: () => void
   loadedDefaults: StoredDefaults | null
-  onDefaultsApplied: () => void
   userEmail?: string | null
   emailMeFilesChosen?: boolean
   resultsEmailSent?: boolean
@@ -47,7 +46,6 @@ export function AttractiveView({
   onStartOver,
   onLoadDefaultsClick,
   loadedDefaults,
-  onDefaultsApplied,
   userEmail,
   emailMeFilesChosen: _emailMeFilesChosen = false,
   resultsEmailSent = false,
@@ -77,10 +75,10 @@ export function AttractiveView({
           {!showResults ? (
             <div id="watermark-tool" className="flex flex-col items-center gap-6 md:gap-8 scroll-mt-8">
               <AttractiveToolCard
+                key={loadedDefaults ? `defaults-${loadedDefaults.mode}-${loadedDefaults.template}-${loadedDefaults.scope}` : 'no-defaults'}
                 onWatermarkRequest={onWatermarkRequest}
                 disabled={pipelineState === 'uploading' || pipelineState === 'processing'}
                 loadedDefaults={loadedDefaults}
-                onDefaultsApplied={onDefaultsApplied}
                 onLoadDefaultsClick={onLoadDefaultsClick}
                 onRequestSaveDefaults={onRequestSaveDefaults}
                 userEmail={userEmail ?? undefined}

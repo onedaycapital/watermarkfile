@@ -560,10 +560,6 @@ function App() {
     }
   }
 
-  const onDefaultsApplied = useCallback(() => {
-    setLoadedDefaults(null)
-  }, [])
-
   return (
     <>
       <AttractiveView
@@ -581,7 +577,6 @@ function App() {
         onStartOver={onStartOver}
         onLoadDefaultsClick={userEmail ? undefined : onLoadDefaultsClick}
         loadedDefaults={loadedDefaults}
-        onDefaultsApplied={onDefaultsApplied}
         userEmail={userEmail}
         emailMeFilesChosen={lastEmailMeFilesChoice}
         resultsEmailSent={resultsEmailSent}
