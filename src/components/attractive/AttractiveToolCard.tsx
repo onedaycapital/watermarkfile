@@ -128,6 +128,8 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
   const [disabledHint, setDisabledHint] = useState<string | null>(null)
   const [emailMeFiles, setEmailMeFiles] = useState(false)
+  const [saveAsDefaultStep1, setSaveAsDefaultStep1] = useState(false)
+  const [saveAsDefaultStep2, setSaveAsDefaultStep2] = useState(false)
 
   // Logo preview: create object URL when logo file is set, revoke on change/unmount
   useEffect(() => {
@@ -153,6 +155,8 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     setText(loadedDefaults.text ?? '')
     setTemplate(loadedDefaults.template)
     setScope(loadedDefaults.scope)
+    setSaveAsDefaultStep1(false)
+    setSaveAsDefaultStep2(false)
     const clear = onDefaultsApplied
     const t = setTimeout(() => clear?.(), 0)
     return () => clearTimeout(t)
@@ -172,7 +176,10 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
 
   const handleLogoInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
-    if (f) setLogoFile(f)
+    if (f) {
+      setLogoFile(f)
+      setSaveAsDefaultStep1(false)
+    }
     e.target.value = ''
   }
 
@@ -204,7 +211,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
   }
 
   return (
-    <section className="w-full max-w-2xl md:max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 min-w-0" aria-label="Watermark tool">
+    <section className="w-full max-w-[52rem] md:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-w-0" aria-label="Watermark tool">
       <div className="rounded-3xl border border-slate-200/90 bg-white shadow-card-accent overflow-hidden min-w-0">
         <div className="px-4 py-4 md:px-8 md:py-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 via-violet-50/50 to-slate-50 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -235,7 +242,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                 <ToggleGroup
                   label="Watermark type"
                   value={mode}
-                  onChange={(v) => setMode(v as WatermarkMode)}
+                  onChange={(v) => { setMode(v as WatermarkMode); setSaveAsDefaultStep1(false) }}
                   options={[
                     { value: 'logo', label: 'Logo', icon: <IconImage className="w-4 h-4" /> },
                     { value: 'text', label: 'Text', icon: <IconText className="w-4 h-4" /> },
@@ -280,24 +287,30 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                     )}
                     <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Watermark text</label>
                     <input
-                      type="text"
-                      maxLength={MAX_TEXT_LEN}
-                      value={text}
-                      onChange={(e) => setText(e.target.value)}
-                      placeholder="e.g. Confidential"
+                        type="text"
+                        maxLength={MAX_TEXT_LEN}
+                        value={text}
+                        onChange={(e) => { setText(e.target.value); setSaveAsDefaultStep1(false) }}
+                        placeholder="e.g. Confidential"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/25 transition-all duration-200 font-medium"
                     />
                     <span className="text-xs text-slate-500 font-medium">{text.length}/{MAX_TEXT_LEN}</span>
                   </>
                 )}
                 {onRequestSaveDefaults && (
-                  <button
-                    type="button"
-                    onClick={() => onRequestSaveDefaults({ mode, text: mode === 'text' ? text : undefined, template, scope })}
-                    className="self-start text-xs font-semibold text-violet-600 hover:text-violet-800 hover:underline underline-offset-2 mt-0.5"
-                  >
-                    Save as default
-                  </button>
+                  <label className="flex items-center gap-2 cursor-pointer mt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={saveAsDefaultStep1}
+                      onChange={(e) => {
+                        const checked = e.target.checked
+                        setSaveAsDefaultStep1(checked)
+                        if (checked) onRequestSaveDefaults({ mode, text: mode === 'text' ? text : undefined, template, scope })
+                      }}
+                      className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    <span className="text-xs font-semibold text-slate-600">Save as default</span>
+                  </label>
                 )}
               </div>
             </StepTile>
@@ -308,7 +321,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                 <div className="relative">
                   <select
                     value={template}
-                    onChange={(e) => setTemplate(e.target.value as Template)}
+                    onChange={(e) => { setTemplate(e.target.value as Template); setSaveAsDefaultStep2(false) }}
                     className="w-full rounded-xl border border-slate-200 bg-white pl-3 pr-9 py-2 text-xs text-slate-800 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/25 appearance-none transition-all duration-200"
                   >
                     {TEMPLATES.map((t) => (
@@ -322,20 +335,26 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                 <ToggleGroup
                   label="Apply to"
                   value={scope}
-                  onChange={(v) => setScope(v as Scope)}
+                  onChange={(v) => { setScope(v as Scope); setSaveAsDefaultStep2(false) }}
                   options={[
                     { value: 'all-pages', label: 'All pages' },
                     { value: 'first-page-only', label: 'First page only' },
                   ]}
                 />
                 {onRequestSaveDefaults && (
-                  <button
-                    type="button"
-                    onClick={() => onRequestSaveDefaults({ mode, text: mode === 'text' ? text : undefined, template, scope })}
-                    className="self-start text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline underline-offset-2 mt-0.5"
-                  >
-                    Save as default
-                  </button>
+                  <label className="flex items-center gap-2 cursor-pointer mt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={saveAsDefaultStep2}
+                      onChange={(e) => {
+                        const checked = e.target.checked
+                        setSaveAsDefaultStep2(checked)
+                        if (checked) onRequestSaveDefaults({ mode, text: mode === 'text' ? text : undefined, template, scope })
+                      }}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs font-semibold text-slate-600">Save as default</span>
+                  </label>
                 )}
               </div>
             </StepTile>
