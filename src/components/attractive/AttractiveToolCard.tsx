@@ -35,7 +35,7 @@ const STEP_ACCENTS = [
   { border: 'border-l-violet-500', header: 'bg-gradient-to-r from-violet-50 to-white', badge: 'bg-gradient-to-r from-violet-500 to-fuchsia-500', badgeRing: 'ring-violet-200' },
 ]
 
-/** Pill toggle group — selected option is bright and clearly on */
+/** Pill toggle group — matches Step 4 style: violet track, selected = solid violet */
 function ToggleGroup({
   options,
   value,
@@ -53,7 +53,7 @@ function ToggleGroup({
       <div
         role="group"
         aria-label={label}
-        className="inline-flex rounded-full bg-slate-200/80 p-1 gap-0.5 shadow-inner"
+        className="inline-flex w-full rounded-full bg-violet-200/90 p-1 gap-0.5 shadow-inner"
       >
         {options.map((opt) => {
           const isSelected = value === opt.value
@@ -62,10 +62,10 @@ function ToggleGroup({
               key={opt.value}
               type="button"
               onClick={() => onChange(opt.value)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
                 isSelected
-                  ? 'bg-white text-violet-700 shadow-md ring-1 ring-slate-200/80'
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-violet-600 text-white shadow-md'
+                  : 'text-slate-600 hover:text-slate-800'
               }`}
             >
               {opt.icon}
@@ -277,7 +277,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
         <div className="px-4 py-4 md:px-8 md:py-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 via-violet-50/50 to-slate-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="min-w-0 flex-1 text-center">
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-              Create your watermarked files
+              Create Your Watermarked Files
             </h2>
             <p className="text-sm text-slate-600 mt-1 font-medium break-words">
               Follow the steps in order — each leads to the next.
@@ -298,7 +298,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
         </div>
         <div className="p-4 md:p-6 bg-gradient-to-br from-slate-50/80 to-violet-50/30 min-w-0">
           <div className="flex flex-col md:flex-row md:items-stretch gap-0 min-w-0">
-            <StepTile step={1} title="Logo or text" accent={STEP_ACCENTS[0]}>
+            <StepTile step={1} title="Logo or Text" accent={STEP_ACCENTS[0]}>
               <div className="flex flex-col gap-3">
                 <ToggleGroup
                   label="Watermark type"
@@ -377,9 +377,11 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
             </StepTile>
             <StepConnector isLast={false} />
 
-            <StepTile step={2} title="Layout & pages" accent={STEP_ACCENTS[1]}>
+            <StepTile step={2} title="Layout & Pages" accent={STEP_ACCENTS[1]}>
               <div className="flex flex-col gap-2.5">
-                <div className="relative">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Layout</span>
+                  <div className="relative">
                   <select
                     value={template}
                     onChange={(e) => { setTemplate(e.target.value as Template); setSaveAsDefaultStep2(false) }}
@@ -393,6 +395,8 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                     <IconChevronDown className="w-4 h-4" />
                   </span>
                 </div>
+                </div>
+                <div className="mt-3">
                 <ToggleGroup
                   label="Apply to"
                   value={scope}
@@ -402,6 +406,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                     { value: 'first-page-only', label: 'First page only' },
                   ]}
                 />
+                </div>
                 {onRequestSaveDefaults && (
                   <label className="flex items-center gap-2 cursor-pointer mt-0.5">
                     <input
@@ -421,13 +426,13 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
             </StepTile>
             <StepConnector isLast={false} />
 
-            <StepTile step={3} title="Upload files" accent={STEP_ACCENTS[2]}>
+            <StepTile step={3} title="Upload Files" accent={STEP_ACCENTS[2]}>
               <div
                 role="button"
                 tabIndex={0}
                 onClick={() => fileInputRef.current?.click()}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click() } }}
-                className="flex-1 min-h-[88px] md:min-h-[100px] rounded-xl flex flex-col items-center justify-center p-4 text-center border border-slate-200/90 bg-slate-50/60 cursor-pointer hover:border-slate-300 hover:bg-slate-100/80 transition-colors duration-200"
+                className="flex-1 min-h-[52px] md:min-h-[60px] rounded-xl flex flex-col items-center justify-center p-3 text-center border border-slate-200/90 bg-slate-50/60 cursor-pointer hover:border-slate-300 hover:bg-slate-100/80 transition-colors duration-200"
                 aria-label="Choose files to watermark"
               >
                 <input
@@ -439,7 +444,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                   className="sr-only"
                   aria-hidden
                 />
-                <IconUpload className="w-8 h-8 md:w-9 md:h-9 mx-auto text-slate-400 mb-2.5" />
+                <IconUpload className="w-6 h-6 md:w-7 md:h-7 mx-auto text-slate-400 mb-1.5" />
                 <span className="text-sm font-semibold text-slate-600">Browse files</span>
                 {files.length > 0 && (
                   <p className="text-xs text-slate-600 mt-2 font-medium" onClick={(e) => e.stopPropagation()}>
@@ -458,7 +463,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
             </StepTile>
             <StepConnector isLast={false} />
 
-            <StepTile step={4} title="Get files" accent={STEP_ACCENTS[3]}>
+            <StepTile step={4} title="Get Files" accent={STEP_ACCENTS[3]}>
               <div className="flex flex-col justify-center flex-1 gap-3">
                 <div className="flex flex-col gap-2">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">How do you want your files?</span>
@@ -494,10 +499,6 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                       >
                         Email me files
                       </button>
-                    </div>
-                    <div className="flex flex-col gap-0.5 text-xs font-medium text-slate-600">
-                      <p className={!emailMeFiles ? 'text-violet-600 font-semibold' : ''}>Download now</p>
-                      <p className={emailMeFiles ? 'text-violet-600 font-semibold' : ''}>Email me files</p>
                     </div>
                   </div>
                 </div>

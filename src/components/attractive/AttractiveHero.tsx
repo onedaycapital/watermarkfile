@@ -25,12 +25,12 @@ export function AttractiveHero() {
             backgroundClip: 'text',
           }}
         >
-          Add watermarks in seconds
+          Add Watermarks in Seconds
         </h1>
 
         {/* Subheadline — strong, clear hierarchy */}
         <p className="mt-2 md:mt-3 font-display font-bold text-white text-display-2xl [text-shadow:0_2px_24px_rgba(0,0,0,0.4)] leading-tight">
-          Protect your documents.
+          Protect Your Documents.
         </p>
 
         {/* Promo badge — first month free, product offering clear */}
