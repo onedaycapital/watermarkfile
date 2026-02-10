@@ -114,7 +114,7 @@ interface AttractiveToolCardProps {
   loadedDefaults?: StoredDefaults | null
   onDefaultsApplied?: () => void
   onLoadDefaultsClick?: () => void
-  onRequestSaveDefaults?: (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>) => void
+  onRequestSaveDefaults?: (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>, logoFile?: File) => void
 }
 
 export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefaults, onDefaultsApplied, onLoadDefaultsClick, onRequestSaveDefaults }: AttractiveToolCardProps) {
@@ -148,7 +148,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     return () => URL.revokeObjectURL(url)
   }, [logoFile])
 
-  // Apply loaded defaults and clear parent ref after state has been committed (so Step 4 can activate)
+  // Apply loaded defaults (step 1: logo or text; step 2: template/scope). Logo URL only when mode is logo.
   useEffect(() => {
     if (!loadedDefaults) return
     setMode(loadedDefaults.mode)
@@ -157,6 +157,15 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     setScope(loadedDefaults.scope)
     setSaveAsDefaultStep1(false)
     setSaveAsDefaultStep2(false)
+    if (loadedDefaults.mode === 'logo' && loadedDefaults.logo_url) {
+      fetch(loadedDefaults.logo_url)
+        .then((r) => r.blob())
+        .then((blob) => new File([blob], 'default-logo.png', { type: blob.type || 'image/png' }))
+        .then((file) => setLogoFile(file))
+        .catch(() => {})
+    } else {
+      setLogoFile(null)
+    }
     const clear = onDefaultsApplied
     const t = setTimeout(() => clear?.(), 0)
     return () => clearTimeout(t)
@@ -305,7 +314,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                       onChange={(e) => {
                         const checked = e.target.checked
                         setSaveAsDefaultStep1(checked)
-                        if (checked) onRequestSaveDefaults({ mode, text: mode === 'text' ? text : undefined, template, scope })
+                        if (checked) onRequestSaveDefaults({ mode, text: mode === 'text' ? text : undefined, template, scope }, mode === 'logo' ? logoFile ?? undefined : undefined)
                       }}
                       className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
                     />
@@ -349,7 +358,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                       onChange={(e) => {
                         const checked = e.target.checked
                         setSaveAsDefaultStep2(checked)
-                        if (checked) onRequestSaveDefaults({ mode, text: mode === 'text' ? text : undefined, template, scope })
+                        if (checked) onRequestSaveDefaults({ mode, text: mode === 'text' ? text : undefined, template, scope }, mode === 'logo' ? logoFile ?? undefined : undefined)
                       }}
                       className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                     />

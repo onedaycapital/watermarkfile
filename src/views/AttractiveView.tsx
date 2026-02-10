@@ -22,7 +22,7 @@ export interface AttractiveViewProps {
   onEmailToggleClick: () => void
   onMagicLinkEmailSent?: (email: string) => void
   onConfirmBlockEmailChange?: (email: string) => void
-  onRequestSaveDefaults: (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>) => void
+  onRequestSaveDefaults: (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>, logoFile?: File) => void
   onStartOver: () => void
   onLoadDefaultsClick?: () => void
   loadedDefaults: StoredDefaults | null

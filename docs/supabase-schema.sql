@@ -29,9 +29,13 @@ CREATE TABLE IF NOT EXISTS public.user_defaults (
   text_value text NOT NULL DEFAULT '',
   template text NOT NULL DEFAULT 'diagonal-center',
   scope text NOT NULL DEFAULT 'all-pages',
+  logo_storage_path text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- If table already exists, add column (run once):
+-- ALTER TABLE public.user_defaults ADD COLUMN IF NOT EXISTS logo_storage_path text;
 
 -- RLS: only service role (backend) can read/write
 ALTER TABLE public.user_stats ENABLE ROW LEVEL SECURITY;

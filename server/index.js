@@ -17,7 +17,7 @@ import {
   cleanupExpiredTokens,
 } from './store.js'
 import { sendMagicLinkEmail, sendReplyWithAttachments } from './email.js'
-import { upsertUserStats, saveFileToStorage, isSupabaseConfigured, getUserDefaults, upsertUserDefaults } from './supabase.js'
+import { upsertUserStats, saveFileToStorage, saveDefaultLogo, getDefaultLogoSignedUrl, isSupabaseConfigured, getUserDefaults, upsertUserDefaults } from './supabase.js'
 import { processInboundEmail } from './inbound.js'
 
 const app = express()
@@ -31,6 +31,8 @@ const DOMAIN_LABEL = `By ${DOMAIN}`
 
 // In-memory store for processed files: token -> { buffer, filename, contentType }
 const store = new Map()
+// Cached logo (no email yet): first success token -> { buffer, contentType }; saved to Storage when user submits email on page 2
+const cachedLogoByToken = new Map()
 // User defaults by email (normalized lowercase): { mode, text?, template, scope, updatedAt }
 const defaultsByEmail = new Map()
 
@@ -38,7 +40,10 @@ const defaultsByEmail = new Map()
 function cleanup() {
   const now = Date.now()
   for (const [token, entry] of store.entries()) {
-    if (entry.createdAt && now - entry.createdAt > 60 * 60 * 1000) store.delete(token)
+    if (entry.createdAt && now - entry.createdAt > 60 * 60 * 1000) {
+      store.delete(token)
+      cachedLogoByToken.delete(token)
+    }
   }
 }
 setInterval(cleanup, 15 * 60 * 1000)
@@ -66,7 +71,14 @@ app.get('/api/defaults', async (req, res) => {
   const email = (req.query.email || '').toString().trim().toLowerCase()
   if (!email) return res.status(400).json({ error: 'Email required' })
   const fromDb = isSupabaseConfigured() ? await getUserDefaults(email) : null
-  if (fromDb) return res.json({ mode: fromDb.mode, text: fromDb.text, template: fromDb.template, scope: fromDb.scope })
+  if (fromDb) {
+    const payload = { mode: fromDb.mode, text: fromDb.text, template: fromDb.template, scope: fromDb.scope }
+    if (fromDb.logo_storage_path) {
+      const logoUrl = await getDefaultLogoSignedUrl(fromDb.logo_storage_path)
+      if (logoUrl) payload.logo_url = logoUrl
+    }
+    return res.json(payload)
+  }
   const saved = defaultsByEmail.get(email)
   if (!saved) return res.status(404).json({ error: 'No defaults found for this email' })
   res.json({ mode: saved.mode, text: saved.text, template: saved.template, scope: saved.scope })
@@ -93,6 +105,29 @@ app.post('/api/defaults', async (req, res) => {
   res.json({ ok: true })
 })
 
+// POST /api/defaults/logo — upload default logo for email (multipart: email, logo)
+app.post('/api/defaults/logo', upload.single('logo'), async (req, res) => {
+  const email = (req.body?.email || '').toString().trim().toLowerCase()
+  const logoFile = req.file
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Valid email required' })
+  if (!logoFile || !logoFile.buffer) return res.status(400).json({ error: 'Logo file required' })
+  if (!isSupabaseConfigured()) return res.status(503).json({ error: 'Storage not configured' })
+  try {
+    const storagePath = await saveDefaultLogo(email, logoFile.buffer, logoFile.mimetype)
+    if (!storagePath) return res.status(500).json({ error: 'Failed to save logo' })
+    const current = await getUserDefaults(email)
+    const payload = current
+      ? { mode: current.mode, text: current.text, template: current.template, scope: current.scope, logo_storage_path: storagePath }
+      : { mode: 'logo', text: '', template: 'diagonal-center', scope: 'all-pages', logo_storage_path: storagePath }
+    await upsertUserDefaults(email, payload)
+    defaultsByEmail.set(email, { ...payload, updatedAt: Date.now() })
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[defaults/logo]', err)
+    res.status(500).json({ error: err.message || 'Failed to save logo' })
+  }
+})
+
 // POST /api/auth/send-magic-link — send magic link for email verification; store pending delivery
 app.post('/api/auth/send-magic-link', async (req, res) => {
   try {
@@ -113,6 +148,7 @@ app.post('/api/auth/send-magic-link', async (req, res) => {
       upsertUserStats(email, fileCount).catch((err) => console.error('[supabase] upsertUserStats (send-magic-link):', err.message))
       // Save cached originals (from first run without email) to Storage and uploads table
       if (Array.isArray(pendingDelivery) && pendingDelivery.length > 0) {
+        let logoSaved = false
         for (const it of pendingDelivery) {
           const fileToken = (it.token || (it.downloadUrl || '').replace(/^.*\/api\/download\//, '').replace(/\?.*$/, '')).trim()
           if (!fileToken) continue
@@ -121,6 +157,18 @@ app.post('/api/auth/send-magic-link', async (req, res) => {
             const { buffer: origBuffer, filename: origFilename, contentType: origContentType } = storeEntry.original
             saveFileToStorage(email, origFilename, origBuffer, origContentType).catch((err) => console.error('[supabase] saveFileToStorage (cached):', err.message))
             delete storeEntry.original
+          }
+          if (!logoSaved) {
+            const cachedLogo = cachedLogoByToken.get(fileToken)
+            if (cachedLogo) {
+              logoSaved = true
+              const template = cachedLogo.template || 'diagonal-center'
+              const scope = cachedLogo.scope || 'all-pages'
+              saveDefaultLogo(email, cachedLogo.buffer, cachedLogo.contentType).then((logoPath) => {
+                if (logoPath) return upsertUserDefaults(email, { mode: 'logo', text: '', template, scope, logo_storage_path: logoPath })
+              }).catch((err) => console.error('[supabase] saveDefaultLogo (cached):', err.message))
+              cachedLogoByToken.delete(fileToken)
+            }
           }
         }
       }
@@ -335,16 +383,28 @@ app.post('/api/watermark', upload.fields([
     }
 
     const email = (req.body.email || '').toString().trim().toLowerCase()
-    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const hasEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    if (hasEmail) {
       const successCount = results.filter((r) => r.status === 'success').length
       const errorCount = results.filter((r) => r.status === 'error').length
       recordUploadBatch(email, { successCount, errorCount, failReasons })
       if (successCount > 0) {
         if (isSupabaseConfigured()) {
           upsertUserStats(email, successCount).catch((err) => console.error('[supabase] upsertUserStats:', err.message))
+          if (mode === 'logo' && logoFile) {
+            saveDefaultLogo(email, logoFile.buffer, logoFile.mimetype).then((logoPath) => {
+              if (logoPath) upsertUserDefaults(email, { mode, text: text || '', template, scope, logo_storage_path: logoPath }).catch((e) => console.error('[supabase] upsertUserDefaults logo:', e.message))
+            }).catch((err) => console.error('[supabase] saveDefaultLogo:', err.message))
+          }
         } else {
           console.log('[supabase] Skipped: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on Railway to persist stats and storage.')
         }
+      }
+    } else if (mode === 'logo' && logoFile && isSupabaseConfigured()) {
+      const firstSuccess = results.find((r) => r.status === 'success' && r.downloadUrl)
+      if (firstSuccess) {
+        const token = firstSuccess.downloadUrl.replace(/^.*\/api\/download\//, '').replace(/\?.*$/, '').trim()
+        if (token) cachedLogoByToken.set(token, { buffer: Buffer.from(logoFile.buffer), contentType: logoFile.mimetype || 'image/png', template, scope })
       }
     }
 

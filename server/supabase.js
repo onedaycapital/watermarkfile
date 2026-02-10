@@ -14,6 +14,7 @@ if (url && serviceRoleKey) {
 }
 
 const BUCKET = 'watermarked-files'
+const DEFAULT_LOGOS_PREFIX = 'default-logos'
 
 /** Sanitize email for use in storage path (no @ or . or +) */
 function sanitizeEmailForPath(email) {
@@ -81,20 +82,66 @@ export async function saveFileToStorage(email, fileName, buffer, contentType) {
 }
 
 /**
+ * Upload default logo to Storage and return storage path.
+ * @param {string} email
+ * @param {Buffer} buffer
+ * @param {string} contentType
+ * @returns {Promise<string | null>} storage path or null
+ */
+export async function saveDefaultLogo(email, buffer, contentType) {
+  if (!client) return null
+  try {
+    const prefix = sanitizeEmailForPath(email)
+    const ext = (contentType || '').toLowerCase().includes('png') ? 'png' : 'jpg'
+    const storagePath = `${DEFAULT_LOGOS_PREFIX}/${prefix}/logo.${ext}`
+    const { error } = await client.storage.from(BUCKET).upload(storagePath, buffer, {
+      contentType: contentType || 'image/png',
+      upsert: true,
+    })
+    if (error) {
+      console.error('[supabase] saveDefaultLogo:', error.message)
+      return null
+    }
+    return storagePath
+  } catch (err) {
+    console.error('[supabase] saveDefaultLogo:', err.message)
+    return null
+  }
+}
+
+/**
+ * Get a signed URL for a default logo (1h expiry).
+ * @param {string} storagePath
+ * @returns {Promise<string | null>}
+ */
+export async function getDefaultLogoSignedUrl(storagePath) {
+  if (!client || !storagePath) return null
+  try {
+    const { data, error } = await client.storage.from(BUCKET).createSignedUrl(storagePath, 3600)
+    if (error || !data?.signedUrl) return null
+    return data.signedUrl
+  } catch (err) {
+    console.error('[supabase] getDefaultLogoSignedUrl:', err.message)
+    return null
+  }
+}
+
+/**
  * Get saved watermark defaults for an email (for email-in flow and API).
  * @param {string} email
- * @returns {Promise<{ mode: string, text: string, template: string, scope: string } | null>}
+ * @returns {Promise<{ mode: string, text: string, template: string, scope: string, logo_storage_path?: string } | null>}
  */
 export async function getUserDefaults(email) {
   if (!client) return null
   try {
-    const { data, error } = await client.from('user_defaults').select('mode, text_value, template, scope').eq('email', email).single()
+    const { data, error } = await client.from('user_defaults').select('mode, text_value, template, scope, logo_storage_path').eq('email', email).single()
     if (error || !data) return null
     return {
       mode: data.mode || 'text',
       text: data.text_value || '',
       template: data.template || 'diagonal-center',
       scope: data.scope || 'all-pages',
+      logo_storage_path: data.logo_storage_path || undefined,
     }
   } catch (err) {
     console.error('[supabase] getUserDefaults:', err.message)
@@ -105,23 +152,22 @@ export async function getUserDefaults(email) {
 /**
  * Upsert user_defaults for an email.
  * @param {string} email
- * @param {{ mode: string, text?: string, template: string, scope: string }} defaults
+ * @param {{ mode: string, text?: string, template: string, scope: string, logo_storage_path?: string }} defaults
  */
 export async function upsertUserDefaults(email, defaults) {
   if (!client) return
   try {
     const now = new Date().toISOString()
-    await client.from('user_defaults').upsert(
-      {
-        email,
-        mode: defaults.mode === 'logo' ? 'logo' : 'text',
-        text_value: defaults.text ?? '',
-        template: defaults.template || 'diagonal-center',
-        scope: defaults.scope || 'all-pages',
-        updated_at: now,
-      },
-      { onConflict: 'email' }
-    )
+    const row = {
+      email,
+      mode: defaults.mode === 'logo' ? 'logo' : 'text',
+      text_value: defaults.text ?? '',
+      template: defaults.template || 'diagonal-center',
+      scope: defaults.scope || 'all-pages',
+      updated_at: now,
+    }
+    if (defaults.logo_storage_path !== undefined) row.logo_storage_path = defaults.logo_storage_path || null
+    await client.from('user_defaults').upsert(row, { onConflict: 'email' })
   } catch (err) {
     console.error('[supabase] upsertUserDefaults:', err.message)
   }

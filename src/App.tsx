@@ -46,6 +46,8 @@ function App() {
   const [saveDefaultsLoading, setSaveDefaultsLoading] = useState(false)
   /** When user clicks "Save as default" in step 1 or 2, we store the chosen defaults until modal submit. */
   const [pendingSaveDefaults, setPendingSaveDefaults] = useState<Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'> | null>(null)
+  /** Logo file to upload when saving defaults with email (from step 1 "Save as default" with logo). */
+  const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null)
   /** Email typed in the "Confirm email to download" block – use for toggle/save so we don't ask again. */
   const [emailFromConfirmBlock, setEmailFromConfirmBlock] = useState('')
   /** For the current results: did user choose "Email me files" in step 4? (so we send email and don't auto-download) */
@@ -98,6 +100,7 @@ function App() {
           text: data.text,
           template: data.template,
           scope: data.scope,
+          logo_url: data.logo_url,
         })
       })
       .catch(() => {})
@@ -117,6 +120,7 @@ function App() {
             text: data.text,
             template: data.template,
             scope: data.scope,
+            logo_url: data.logo_url,
           })
         }
       })
@@ -379,6 +383,16 @@ function App() {
     }
   }
 
+  async function uploadDefaultLogo(email: string, logoFile: File): Promise<void> {
+    const normalized = email.trim().toLowerCase()
+    const form = new FormData()
+    form.append('email', normalized)
+    form.append('logo', logoFile)
+    const res = await fetch(apiUrl('/api/defaults/logo'), { method: 'POST', body: form })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error((data?.error as string) || res.statusText || 'Failed to save logo')
+  }
+
   const onSkipEmail = () => {
     track(AnalyticsEvents.EmailSkipped)
     setShowEmailModal(false)
@@ -398,10 +412,17 @@ function App() {
     })
   }
 
-  /** Called from step 1 or step 2 when user clicks "Save as default". Uses current tool options; shows email modal if needed. */
-  const onRequestSaveDefaults = (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>) => {
+  /** Called from step 1 or step 2 when user checks "Save as default". Persist to localStorage immediately; optionally sync to API (and upload logo) if we have email. */
+  const onRequestSaveDefaults = (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>, logoFile?: File) => {
     track(AnalyticsEvents.SaveDefaultsClicked)
     setPendingSaveDefaults(defaults)
+    setPendingLogoFile(logoFile ?? null)
+    setStoredDefaults({
+      mode: defaults.mode,
+      text: defaults.text,
+      template: defaults.template,
+      scope: defaults.scope,
+    })
     const emailToUse = (userEmail || emailFromConfirmBlock.trim() || '').toLowerCase() || null
     if (emailToUse) {
       if (!userEmail) {
@@ -416,9 +437,11 @@ function App() {
       }
       setSaveDefaultsLoading(true)
       saveDefaultsToApi(emailToUse, defaults)
+        .then(() => (logoFile ? uploadDefaultLogo(emailToUse, logoFile) : undefined))
         .then(() => {
           track(AnalyticsEvents.SaveDefaultsSuccess)
           setPendingSaveDefaults(null)
+          setPendingLogoFile(null)
         })
         .catch((err) => {
           alert(err instanceof Error ? err.message : 'Failed to save defaults')
@@ -436,11 +459,13 @@ function App() {
     try {
       const normalized = email.trim().toLowerCase()
       await saveDefaultsToApi(normalized, toSave)
+      if (pendingLogoFile) await uploadDefaultLogo(normalized, pendingLogoFile)
       setUserEmail(normalized)
       setAnalyticsUserId(normalized)
       track(AnalyticsEvents.SaveDefaultsSuccess)
       setShowSaveDefaultsModal(false)
       setPendingSaveDefaults(null)
+      setPendingLogoFile(null)
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to save defaults')
     } finally {
@@ -467,6 +492,7 @@ function App() {
         text: data.text,
         template: data.template,
         scope: data.scope,
+        logo_url: data.logo_url,
       })
       track(AnalyticsEvents.LoadDefaultsSuccess)
       setShowLoadDefaultsModal(false)
@@ -524,7 +550,7 @@ function App() {
 
       <EmailPromptModal
         open={showSaveDefaultsModal}
-        onClose={() => { setShowSaveDefaultsModal(false); setPendingSaveDefaults(null) }}
+        onClose={() => { setShowSaveDefaultsModal(false); setPendingSaveDefaults(null); setPendingLogoFile(null) }}
         title="Enter your email to save these settings as default"
         submitLabel="Save"
         onSubmit={onSaveDefaultsModalSubmit}

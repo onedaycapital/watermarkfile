@@ -7,6 +7,8 @@ export interface StoredDefaults {
   text?: string
   template: Template
   scope: Scope
+  /** Set when loaded from API; used to show default logo and create a File for the next watermark */
+  logo_url?: string
 }
 
 export function getStoredDefaults(): StoredDefaults | null {
