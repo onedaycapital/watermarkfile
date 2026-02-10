@@ -149,28 +149,39 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     return () => URL.revokeObjectURL(url)
   }, [logoFile])
 
-  // Apply loaded defaults (step 1: logo or text; step 2: template/scope). Logo URL only when mode is logo.
+  // Apply loaded defaults (step 1: logo or text; step 2: template/scope). Show checkmarks to indicate defaults are loaded. Logo: clear onDefaultsApplied only after fetch completes so logo has time to load.
   useEffect(() => {
     if (!loadedDefaults) return
+    let cancelled = false
     setMode(loadedDefaults.mode)
     setText(loadedDefaults.text ?? '')
     setTemplate(loadedDefaults.template)
     setScope(loadedDefaults.scope)
-    setSaveAsDefaultStep1(false)
-    setSaveAsDefaultStep2(false)
+    setSaveAsDefaultStep1(true)
+    setSaveAsDefaultStep2(true)
+    const clear = onDefaultsApplied
     if (loadedDefaults.mode === 'logo' && loadedDefaults.logo_url) {
       const logoUrl = loadedDefaults.logo_url.startsWith('/') ? apiUrl(loadedDefaults.logo_url) : loadedDefaults.logo_url
       fetch(logoUrl, { credentials: 'include' })
         .then((r) => r.blob())
         .then((blob) => new File([blob], 'default-logo.png', { type: blob.type || 'image/png' }))
-        .then((file) => setLogoFile(file))
+        .then((file) => {
+          if (!cancelled) setLogoFile(file)
+        })
         .catch(() => {})
-    } else {
-      setLogoFile(null)
+        .finally(() => {
+          if (!cancelled) clear?.()
+        })
+      return () => {
+        cancelled = true
+      }
     }
-    const clear = onDefaultsApplied
-    const t = setTimeout(() => clear?.(), 150)
-    return () => clearTimeout(t)
+    setLogoFile(null)
+    const t = setTimeout(() => clear?.(), 100)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
   }, [loadedDefaults, onDefaultsApplied])
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {

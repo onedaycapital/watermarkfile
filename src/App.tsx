@@ -108,8 +108,7 @@ function App() {
     return () => { cancelled = true }
   }, [])
 
-  // On every load (new tab, refresh): fetch defaults from API; persist to localStorage and apply. If API fails, apply from localStorage so UI still shows saved defaults.
-  useEffect(() => {
+  const loadDefaultsForUser = useCallback(() => {
     const storedEmail = getStoredEmail()
     const url = storedEmail
       ? apiUrl(`/api/defaults?email=${encodeURIComponent(storedEmail)}`)
@@ -153,6 +152,10 @@ function App() {
         }
       })
   }, [])
+
+  useEffect(() => {
+    loadDefaultsForUser()
+  }, [loadDefaultsForUser])
 
   /** Sequential uploads so each request stays under Vercel's ~4.5 MB serverless body limit. */
   const onWatermarkRequest = async (files: File[], options: WatermarkOptions, extras?: { emailMeFiles?: boolean }) => {
@@ -437,6 +440,7 @@ function App() {
       processedCount: 0,
       fileErrors: [],
     })
+    loadDefaultsForUser()
   }
 
   /** Called from step 1 or step 2 when user checks "Save as default". Persist to localStorage immediately; optionally sync to API (and upload logo) if we have email. */
