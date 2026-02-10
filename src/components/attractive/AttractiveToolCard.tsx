@@ -358,11 +358,8 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">
               Create Your Watermarked Files
             </h2>
-            <p className="text-sm text-slate-600 mt-1 font-medium break-words">
-              Follow the steps in order — each leads to the next.
-            </p>
             <p className="text-xs text-slate-500 mt-1 break-words">
-              Use &quot;Save as default&quot; in steps 1 and 2 to remember your choices — and to get watermarked files back by email when you send files to our address.
+              Use &quot;Save as default&quot; in steps 1 and 2 to remember your choices.
             </p>
           </div>
           {onLoadDefaultsClick && (
@@ -542,14 +539,10 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                 )}
               </div>
               <p className="mt-3 text-xs font-medium text-slate-600 text-center">
-                Upload up to 20 files per run<br />
-                Max 4.5 MB per file • 25 MB total per run
+                Up to 20 files • Max 4.5 MB each
               </p>
               <p className="mt-1 text-[11px] text-slate-500 text-center">
-                Accepted formats: PDF, JPG, JPEG, PNG, WebP.
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-500 text-center">
-                Files exceeding limits won't upload — nothing is saved.
+                PDF, JPG, PNG supported
               </p>
             </StepTile>
             <StepConnector isLast={false} />
