@@ -49,14 +49,23 @@ export function ConfirmEmailForDownload({
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setStatus('error')
-        setErrorMessage(data.error || res.statusText || 'Failed to send')
+        let msg = data?.error || res.statusText || 'Failed to send'
+        if (res.status === 503) {
+          msg = 'Email is not set up yet on the server. The site owner needs to configure SMTP (e.g. in Railway).'
+        }
+        setErrorMessage(msg)
         return
       }
       setStatus('sent')
       onMagicLinkSent?.(normalized)
-    } catch {
+    } catch (err) {
       setStatus('error')
-      setErrorMessage('Network error')
+      const base = (import.meta.env.VITE_API_BASE_URL ?? '').toString().trim()
+      setErrorMessage(
+        base
+          ? 'Network error. The backend may be down or blocking requests. Try opening the API URL in a new tab to check.'
+          : 'Network error. The app was built without an API URL. Set VITE_API_BASE_URL in Vercel and redeploy.'
+      )
     }
   }
 

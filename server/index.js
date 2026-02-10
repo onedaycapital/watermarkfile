@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import multer from 'multer'
@@ -5,10 +6,25 @@ import { PDFDocument, rgb, StandardFonts, RotationTypes } from 'pdf-lib'
 import sharp from 'sharp'
 import { v4 as uuidv4 } from 'uuid'
 import path from 'path'
+import {
+  setMagicToken,
+  useMagicToken,
+  setPendingDelivery,
+  getPendingDelivery,
+  clearPendingDelivery,
+  recordUploadBatch,
+  recordSuccessDownloads,
+  cleanupExpiredTokens,
+} from './store.js'
+import { sendMagicLinkEmail, sendReplyWithAttachments } from './email.js'
+import { upsertUserStats, saveFileToStorage, isSupabaseConfigured, getUserDefaults, upsertUserDefaults } from './supabase.js'
+import { processInboundEmail } from './inbound.js'
 
 const app = express()
 // Locked to 3000 for WatermarkFile project (override with PORT env if needed)
 const PORT = Number(process.env.PORT) || 3000
+const APP_ORIGIN = (process.env.APP_ORIGIN || 'https://www.watermarkfile.com').replace(/\/$/, '')
+const MAGIC_LINK_EXPIRY_MS = 15 * 60 * 1000 // 15 minutes
 
 const DOMAIN = 'www.watermarkfile.com'
 const DOMAIN_LABEL = `By ${DOMAIN}`
@@ -26,6 +42,7 @@ function cleanup() {
   }
 }
 setInterval(cleanup, 15 * 60 * 1000)
+setInterval(cleanupExpiredTokens, 60 * 60 * 1000)
 
 app.use(cors({ origin: true }))
 app.use(express.json())
@@ -35,8 +52,8 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB per file
 })
 
-// GET / or /api — backend is API-only; use the app at localhost:5173
-app.get(['/', '/api'], (req, res) => {
+// GET / or /api or /api/health — backend is API-only
+app.get(['/', '/api', '/api/health'], (req, res) => {
   res.json({
     name: 'WatermarkFile API',
     message: 'Use the app at http://localhost:5173 to watermark files.',
@@ -44,10 +61,12 @@ app.get(['/', '/api'], (req, res) => {
   })
 })
 
-// GET /api/defaults?email= — get saved defaults for email
-app.get('/api/defaults', (req, res) => {
+// GET /api/defaults?email= — get saved defaults for email (Supabase first, then in-memory)
+app.get('/api/defaults', async (req, res) => {
   const email = (req.query.email || '').toString().trim().toLowerCase()
   if (!email) return res.status(400).json({ error: 'Email required' })
+  const fromDb = isSupabaseConfigured() ? await getUserDefaults(email) : null
+  if (fromDb) return res.json({ mode: fromDb.mode, text: fromDb.text, template: fromDb.template, scope: fromDb.scope })
   const saved = defaultsByEmail.get(email)
   if (!saved) return res.status(404).json({ error: 'No defaults found for this email' })
   res.json({ mode: saved.mode, text: saved.text, template: saved.template, scope: saved.scope })
@@ -58,7 +77,7 @@ const TEMPLATES_LIST = ['diagonal-center', 'repeating-pattern', 'footer-tag']
 const SCOPES_LIST = ['all-pages', 'first-page-only']
 
 // POST /api/defaults — save defaults for email (body: { email, defaults: { mode, text?, template, scope } })
-app.post('/api/defaults', (req, res) => {
+app.post('/api/defaults', async (req, res) => {
   const email = (req.body?.email || '').toString().trim().toLowerCase()
   const def = req.body?.defaults
   if (!email) return res.status(400).json({ error: 'Email required' })
@@ -68,14 +87,94 @@ app.post('/api/defaults', (req, res) => {
   const mode = def.mode === 'logo' ? 'logo' : 'text'
   const template = TEMPLATES_LIST.includes(def.template) ? def.template : 'diagonal-center'
   const scope = SCOPES_LIST.includes(def.scope) ? def.scope : 'all-pages'
-  defaultsByEmail.set(email, {
-    mode,
-    text: def.text ?? '',
-    template,
-    scope,
-    updatedAt: Date.now(),
-  })
+  const payload = { mode, text: def.text ?? '', template, scope }
+  defaultsByEmail.set(email, { ...payload, updatedAt: Date.now() })
+  if (isSupabaseConfigured()) await upsertUserDefaults(email, payload)
   res.json({ ok: true })
+})
+
+// POST /api/auth/send-magic-link — send magic link for email verification; store pending delivery
+app.post('/api/auth/send-magic-link', async (req, res) => {
+  try {
+    const email = (req.body?.email || '').toString().trim().toLowerCase()
+    const pendingDelivery = req.body?.pendingDelivery // [{ token, name }]
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Valid email required' })
+    }
+    const token = uuidv4()
+    const expiresAt = Date.now() + MAGIC_LINK_EXPIRY_MS
+    setMagicToken(token, { email, expiresAt })
+    if (Array.isArray(pendingDelivery) && pendingDelivery.length > 0) {
+      setPendingDelivery(email, pendingDelivery)
+    }
+    const magicLinkUrl = `${APP_ORIGIN}/?magic=${token}`
+    await sendMagicLinkEmail({ to: email, magicLinkUrl, appOrigin: APP_ORIGIN })
+    res.json({ ok: true, message: 'Magic link sent' })
+  } catch (err) {
+    console.error('[send-magic-link]', err)
+    const isNotConfigured = err.code === 'EMAIL_NOT_CONFIGURED' || err.message === 'EMAIL_NOT_CONFIGURED'
+    if (isNotConfigured) {
+      return res.status(503).json({
+        error: 'Email delivery is not configured. Please try again later or contact the site administrator.',
+      })
+    }
+    let message = err.message || 'Failed to send magic link'
+    // Resend sandbox: you can only send to the email you signed up with
+    if (/only send.*to.*your own email|development mode|recipient.*not allowed/i.test(message)) {
+      message = 'Resend sandbox allows sending only to your Resend account email. Verify your domain in Resend and set RESEND_FROM, or send the magic link to the email you used to sign up for Resend.'
+    }
+    res.status(500).json({ error: message })
+  }
+})
+
+// POST /api/auth/verify-magic-link — verify token, return email + pending deliveries, record stats
+app.post('/api/auth/verify-magic-link', (req, res) => {
+  try {
+    const token = (req.body?.token || '').toString().trim()
+    if (!token) return res.status(400).json({ error: 'Token required' })
+    const data = useMagicToken(token)
+    if (!data) return res.status(400).json({ error: 'Invalid or expired link' })
+    const now = Date.now()
+    if (data.expiresAt && now > data.expiresAt) {
+      return res.status(400).json({ error: 'Link expired' })
+    }
+    const email = data.email
+    const pending = getPendingDelivery(email)
+    const items = pending?.items ?? []
+    const successCount = items.length
+    if (successCount > 0) {
+      recordUploadBatch(email, { successCount, errorCount: 0, failReasons: [] })
+      recordSuccessDownloads(email, successCount)
+      clearPendingDelivery(email)
+    }
+    res.json({
+      ok: true,
+      email,
+      pendingDeliveries: items.map(({ token: t, name }) => ({ downloadUrl: `/api/download/${t}`, name })),
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message || 'Verification failed' })
+  }
+})
+
+// POST /api/webhooks/inbound-email — Resend email.received webhook: process attachments, reply with watermarked files
+app.post('/api/webhooks/inbound-email', async (req, res) => {
+  res.status(200).send()
+  const body = req.body
+  if (body?.type !== 'email.received') return
+  try {
+    const reply = await processInboundEmail({
+      body,
+      appOrigin: APP_ORIGIN,
+      getUserDefaults: (email) => (isSupabaseConfigured() ? getUserDefaults(email) : Promise.resolve(null)),
+      watermarkPdf: (buffer, opts) => watermarkPdf(buffer, opts),
+      watermarkImage: (buffer, opts) => watermarkImage(buffer, opts),
+    })
+    await sendReplyWithAttachments(reply)
+  } catch (err) {
+    console.error('[inbound] Webhook processing failed:', err)
+  }
 })
 
 // GET /api/download/:token — stream processed file
@@ -115,6 +214,7 @@ app.post('/api/watermark', upload.fields([
     }
 
     const results = []
+    const failReasons = []
 
     for (const file of files) {
       const id = uuidv4()
@@ -137,6 +237,7 @@ app.post('/api/watermark', upload.fields([
           outExt = out.ext
         } else {
           results.push({ id, name: file.originalname, status: 'error', errorMessage: 'Unsupported file type' })
+          failReasons.push('Unsupported file type')
           continue
         }
 
@@ -154,13 +255,30 @@ app.post('/api/watermark', upload.fields([
           status: 'success',
           downloadUrl: `/api/download/${token}`,
         })
+        // Persist original (un-watermarked) file to Supabase Storage when configured (fire-and-forget)
+        const emailForSupabase = (req.body.email || '').toString().trim().toLowerCase()
+        if (emailForSupabase && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailForSupabase) && isSupabaseConfigured()) {
+          saveFileToStorage(emailForSupabase, file.originalname, file.buffer, file.mimetype).catch((err) => console.error('[supabase] saveFileToStorage:', err.message))
+        }
       } catch (err) {
+        const msg = err.message || 'Processing failed'
         results.push({
           id,
           name: file.originalname,
           status: 'error',
-          errorMessage: err.message || 'Processing failed',
+          errorMessage: msg,
         })
+        failReasons.push(msg)
+      }
+    }
+
+    const email = (req.body.email || '').toString().trim().toLowerCase()
+    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      const successCount = results.filter((r) => r.status === 'success').length
+      const errorCount = results.filter((r) => r.status === 'error').length
+      recordUploadBatch(email, { successCount, errorCount, failReasons })
+      if (isSupabaseConfigured() && successCount > 0) {
+        upsertUserStats(email, successCount).catch((err) => console.error('[supabase] upsertUserStats:', err.message))
       }
     }
 

@@ -1,0 +1,132 @@
+/**
+ * Supabase client for backend only. Uses service role key.
+ * If SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing, all functions no-op.
+ */
+
+import { createClient } from '@supabase/supabase-js'
+
+const url = (process.env.SUPABASE_URL || '').toString().trim()
+const serviceRoleKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').toString().trim()
+
+let client = null
+if (url && serviceRoleKey) {
+  client = createClient(url, serviceRoleKey)
+}
+
+const BUCKET = 'watermarked-files'
+
+/** Sanitize email for use in storage path (no @ or . or +) */
+function sanitizeEmailForPath(email) {
+  return String(email).toLowerCase().replace(/[@.+]/g, '_')
+}
+
+/**
+ * Upsert user_stats: increment upload_count for email.
+ * @param {string} email
+ * @param {number} additionalCount
+ */
+export async function upsertUserStats(email, additionalCount = 1) {
+  if (!client) return
+  try {
+    const { data: existing } = await client.from('user_stats').select('upload_count').eq('email', email).single()
+    const newCount = (existing?.upload_count ?? 0) + additionalCount
+    await client.from('user_stats').upsert(
+      {
+        email,
+        upload_count: newCount,
+        last_uploaded_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'email' }
+    )
+  } catch (err) {
+    console.error('[supabase] upsertUserStats:', err.message)
+  }
+}
+
+/**
+ * Upload a file buffer to Storage and record in uploads table.
+ * @param {string} email
+ * @param {string} fileName
+ * @param {Buffer} buffer
+ * @param {string} contentType
+ */
+export async function saveFileToStorage(email, fileName, buffer, contentType) {
+  if (!client) return
+  try {
+    const date = new Date().toISOString().slice(0, 10) // yyyy-mm-dd
+    const prefix = sanitizeEmailForPath(email)
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const storagePath = `${prefix}/${date}/${id}_${safeName}`
+
+    const { error: uploadError } = await client.storage.from(BUCKET).upload(storagePath, buffer, {
+      contentType: contentType || 'application/octet-stream',
+      upsert: true,
+    })
+    if (uploadError) {
+      console.error('[supabase] storage upload:', uploadError.message)
+      return
+    }
+
+    await client.from('uploads').insert({
+      email,
+      file_name: fileName,
+      storage_path: storagePath,
+      file_size_bytes: buffer.length,
+    })
+  } catch (err) {
+    console.error('[supabase] saveFileToStorage:', err.message)
+  }
+}
+
+/**
+ * Get saved watermark defaults for an email (for email-in flow and API).
+ * @param {string} email
+ * @returns {Promise<{ mode: string, text: string, template: string, scope: string } | null>}
+ */
+export async function getUserDefaults(email) {
+  if (!client) return null
+  try {
+    const { data, error } = await client.from('user_defaults').select('mode, text_value, template, scope').eq('email', email).single()
+    if (error || !data) return null
+    return {
+      mode: data.mode || 'text',
+      text: data.text_value || '',
+      template: data.template || 'diagonal-center',
+      scope: data.scope || 'all-pages',
+    }
+  } catch (err) {
+    console.error('[supabase] getUserDefaults:', err.message)
+    return null
+  }
+}
+
+/**
+ * Upsert user_defaults for an email.
+ * @param {string} email
+ * @param {{ mode: string, text?: string, template: string, scope: string }} defaults
+ */
+export async function upsertUserDefaults(email, defaults) {
+  if (!client) return
+  try {
+    const now = new Date().toISOString()
+    await client.from('user_defaults').upsert(
+      {
+        email,
+        mode: defaults.mode === 'logo' ? 'logo' : 'text',
+        text_value: defaults.text ?? '',
+        template: defaults.template || 'diagonal-center',
+        scope: defaults.scope || 'all-pages',
+        updated_at: now,
+      },
+      { onConflict: 'email' }
+    )
+  } catch (err) {
+    console.error('[supabase] upsertUserDefaults:', err.message)
+  }
+}
+
+export function isSupabaseConfigured() {
+  return !!client
+}

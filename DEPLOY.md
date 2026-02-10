@@ -46,7 +46,23 @@ git push origin main
 
 ---
 
-## 5. Done
+## 5. Email (magic link) in production
+
+Magic-link emails are sent by the **backend on Railway**, not by Vercel. To send real emails and test on the live site:
+
+1. In **Railway** → your project → **Variables**, add:
+   - **`APP_ORIGIN`** = your Vercel app URL, no trailing slash (e.g. `https://www.watermarkfile.com` or `https://watermarkfile.vercel.app`).
+   - **Resend (easiest):** `RESEND_API_KEY` = your Resend API key (no SMTP needed). Optional: `RESEND_FROM` for a custom sender. See **docs/EMAIL_PRODUCTION.md** for other options (SMTP).
+2. Redeploy the Railway service.
+3. Open your Vercel site → watermark a file → enter your email → **Send magic link** → check inbox and click the link.
+
+Full step-by-step and SMTP examples: **docs/EMAIL_PRODUCTION.md**.
+
+For **email-in** (users email files to e.g. **submit@watermarkfile.com** and get watermarked files back): set **RESEND_API_KEY** and Supabase vars on Railway, run the **user_defaults** table (see **docs/supabase-schema.sql**), and configure Resend Inbound webhook → **docs/EMAIL_IN_SETUP.md**.
+
+---
+
+## 6. Done
 
 - **App URL:** your Vercel URL (e.g. `https://watermarkfile.vercel.app`).
 - **API:** runs on Railway; frontend calls it via `VITE_API_BASE_URL`.

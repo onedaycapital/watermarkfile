@@ -35,7 +35,7 @@ export function AttractiveProgressPipeline({ status, state, className = '' }: At
                   ${!isDone && !isCurrent ? 'bg-slate-100 text-slate-400' : ''}
                 `}
               >
-                {isDone ? <IconCheck className="w-4 h-4" /> : i + 1}
+                {isDone ? <IconCheck className="w-4 h-4" checkStroke="#10b981" /> : i + 1}
               </div>
               <span className={`text-sm font-semibold ${isCurrent ? 'text-slate-800' : isDone ? 'text-slate-600' : 'text-slate-400'}`}>
                 {step.label}
