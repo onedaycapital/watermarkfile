@@ -64,6 +64,7 @@ function App() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token }),
+      credentials: 'include',
     })
       .then((res) => res.json())
       .then((data) => {
@@ -89,8 +90,8 @@ function App() {
             setTimeout(() => triggerDownload(apiUrl(item.downloadUrl), item.name), i * 400)
           })
         }
-        // Load defaults for returning user
-        return fetch(apiUrl(`/api/defaults?email=${encodeURIComponent(email)}`))
+        // Load defaults for returning user (cookie was set by verify response)
+        return fetch(apiUrl(`/api/defaults?email=${encodeURIComponent(email)}`), { credentials: 'include' })
       })
       .then((res) => (res?.ok ? res.json() : null))
       .then((data) => {
@@ -107,17 +108,29 @@ function App() {
     return () => { cancelled = true }
   }, [])
 
-  // Auto-load defaults for returning users (email stored from previous session)
+  // On every load (new tab, refresh): check user in DB and load defaults if active (from stored email or cookie)
   useEffect(() => {
     const storedEmail = getStoredEmail()
-    if (!storedEmail) return
-    fetch(apiUrl(`/api/defaults?email=${encodeURIComponent(storedEmail)}`))
+    const url = storedEmail
+      ? apiUrl(`/api/defaults?email=${encodeURIComponent(storedEmail)}`)
+      : apiUrl('/api/defaults')
+    fetch(url, { credentials: 'include' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.mode && data?.template && data?.scope) {
+        if (!data) return
+        if (data.email) {
+          const normalized = data.email.trim().toLowerCase()
+          setUserEmail(normalized)
+          try {
+            localStorage.setItem(EMAIL_STORAGE_KEY, normalized)
+          } catch {
+            /* ignore */
+          }
+        }
+        if (data.mode && data.template && data.scope) {
           setLoadedDefaults({
             mode: data.mode,
-            text: data.text,
+            text: data.text ?? '',
             template: data.template,
             scope: data.scope,
             logo_url: data.logo_url,

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { WatermarkOptions, WatermarkMode, Template, Scope } from '../../types'
 import { getStoredDefaults, type StoredDefaults } from '../../lib/defaults'
+import { apiUrl } from '../../lib/api'
 import { track, AnalyticsEvents, getFileExtension } from '../../lib/analytics'
 import { IconUpload, IconChevronRight, IconChevronDown, IconDownload, IconText, IconImage } from './Icons'
 
@@ -158,7 +159,8 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     setSaveAsDefaultStep1(false)
     setSaveAsDefaultStep2(false)
     if (loadedDefaults.mode === 'logo' && loadedDefaults.logo_url) {
-      fetch(loadedDefaults.logo_url)
+      const logoUrl = loadedDefaults.logo_url.startsWith('/') ? apiUrl(loadedDefaults.logo_url) : loadedDefaults.logo_url
+      fetch(logoUrl)
         .then((r) => r.blob())
         .then((blob) => new File([blob], 'default-logo.png', { type: blob.type || 'image/png' }))
         .then((file) => setLogoFile(file))

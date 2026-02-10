@@ -17,7 +17,7 @@ import {
   cleanupExpiredTokens,
 } from './store.js'
 import { sendMagicLinkEmail, sendReplyWithAttachments } from './email.js'
-import { upsertUserStats, saveFileToStorage, saveDefaultLogo, getDefaultLogoSignedUrl, isSupabaseConfigured, getUserDefaults, upsertUserDefaults } from './supabase.js'
+import { upsertUserStats, saveFileToStorage, saveDefaultLogo, getDefaultLogoBuffer, isSupabaseConfigured, getUserDefaults, upsertUserDefaults, hasUserInStats } from './supabase.js'
 import { processInboundEmail } from './inbound.js'
 
 const app = express()
@@ -25,6 +25,8 @@ const app = express()
 const PORT = Number(process.env.PORT) || 3000
 const APP_ORIGIN = (process.env.APP_ORIGIN || 'https://www.watermarkfile.com').replace(/\/$/, '')
 const MAGIC_LINK_EXPIRY_MS = 15 * 60 * 1000 // 15 minutes
+const USER_COOKIE_NAME = 'watermarkfile_user'
+const USER_COOKIE_MAX_AGE_DAYS = 365
 
 const DOMAIN = 'www.watermarkfile.com'
 const DOMAIN_LABEL = `By ${DOMAIN}`
@@ -49,7 +51,7 @@ function cleanup() {
 setInterval(cleanup, 15 * 60 * 1000)
 setInterval(cleanupExpiredTokens, 60 * 60 * 1000)
 
-app.use(cors({ origin: true }))
+app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
 
 const upload = multer({
@@ -66,22 +68,60 @@ app.get(['/', '/api', '/api/health'], (req, res) => {
   })
 })
 
-// GET /api/defaults?email= — get saved defaults for email (Supabase first, then in-memory)
+// Read email from cookie (set on magic-link verify) for same-origin or cross-origin requests with credentials
+function getEmailFromCookie(req) {
+  let value = req.cookies?.[USER_COOKIE_NAME]
+  if (!value && req.headers?.cookie) {
+    const part = req.headers.cookie.split(';').find((c) => c.trim().startsWith(USER_COOKIE_NAME + '='))
+    if (part) value = part.trim().replace(new RegExp('^' + USER_COOKIE_NAME + '='), '')
+  }
+  if (!value) return null
+  try {
+    const decoded = Buffer.from(value, 'base64url').toString('utf8')
+    const e = decoded.trim().toLowerCase()
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : null
+  } catch {
+    return null
+  }
+}
+
+// GET /api/defaults?email= — get saved defaults for email. If no email, try cookie (for new tab/browser). Only return defaults if user is active (in user_stats).
 app.get('/api/defaults', async (req, res) => {
-  const email = (req.query.email || '').toString().trim().toLowerCase()
+  let email = (req.query.email || '').toString().trim().toLowerCase()
+  if (!email) email = getEmailFromCookie(req) || ''
   if (!email) return res.status(400).json({ error: 'Email required' })
+
+  // Only return defaults for "active" users (have used the app / exist in user_stats)
+  if (isSupabaseConfigured()) {
+    const active = await hasUserInStats(email)
+    if (!active) return res.status(404).json({ error: 'User not active' })
+  }
+
   const fromDb = isSupabaseConfigured() ? await getUserDefaults(email) : null
   if (fromDb) {
-    const payload = { mode: fromDb.mode, text: fromDb.text, template: fromDb.template, scope: fromDb.scope }
+    const payload = { mode: fromDb.mode, text: fromDb.text, template: fromDb.template, scope: fromDb.scope, email }
     if (fromDb.logo_storage_path) {
-      const logoUrl = await getDefaultLogoSignedUrl(fromDb.logo_storage_path)
-      if (logoUrl) payload.logo_url = logoUrl
+      payload.logo_url = `/api/defaults/logo?email=${encodeURIComponent(email)}`
     }
     return res.json(payload)
   }
   const saved = defaultsByEmail.get(email)
   if (!saved) return res.status(404).json({ error: 'No defaults found for this email' })
-  res.json({ mode: saved.mode, text: saved.text, template: saved.template, scope: saved.scope })
+  res.json({ mode: saved.mode, text: saved.text, template: saved.template, scope: saved.scope, email })
+})
+
+// GET /api/defaults/logo?email= — stream default logo (same-origin; avoids CORS with Supabase signed URL)
+app.get('/api/defaults/logo', async (req, res) => {
+  const email = (req.query.email || '').toString().trim().toLowerCase()
+  if (!email) return res.status(400).send('Email required')
+  if (!isSupabaseConfigured()) return res.status(503).send('Storage not configured')
+  const fromDb = await getUserDefaults(email)
+  if (!fromDb?.logo_storage_path) return res.status(404).send('No default logo for this email')
+  const result = await getDefaultLogoBuffer(fromDb.logo_storage_path)
+  if (!result) return res.status(404).send('Logo not found')
+  res.setHeader('Content-Type', result.contentType)
+  res.setHeader('Cache-Control', 'private, max-age=3600')
+  res.send(result.buffer)
 })
 
 // 12 offerings: (Logo|Text) × (Diagonal|Repeating|Footer) × (All Pages|First Page Only) — each a unique default
@@ -214,6 +254,17 @@ app.post('/api/auth/verify-magic-link', (req, res) => {
       clearPendingDelivery(email)
       // user_stats already updated in send-magic-link when they submitted on page 2; avoid double-count
     }
+    // Ensure user is in user_stats so GET /api/defaults considers them "active" (e.g. when they only arrived via magic link)
+    if (isSupabaseConfigured()) upsertUserStats(email, 0).catch((err) => console.error('[supabase] upsertUserStats (verify):', err.message))
+    // Set cookie so new tab/browser can load defaults without localStorage (credentials: 'include' on GET /api/defaults)
+    const cookieValue = Buffer.from(email.trim().toLowerCase(), 'utf8').toString('base64url')
+    res.cookie(USER_COOKIE_NAME, cookieValue, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: USER_COOKIE_MAX_AGE_DAYS * 24 * 60 * 60,
+      path: '/',
+    })
     res.json({
       ok: true,
       email,

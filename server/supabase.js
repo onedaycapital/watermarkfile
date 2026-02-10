@@ -22,6 +22,22 @@ function sanitizeEmailForPath(email) {
 }
 
 /**
+ * Check if email exists in user_stats (user has used the app / is "active").
+ * @param {string} email
+ * @returns {Promise<boolean>}
+ */
+export async function hasUserInStats(email) {
+  if (!client || !email) return false
+  try {
+    const { data, error } = await client.from('user_stats').select('email').eq('email', email).maybeSingle()
+    return !error && !!data
+  } catch (err) {
+    console.error('[supabase] hasUserInStats:', err.message)
+    return false
+  }
+}
+
+/**
  * Upsert user_stats: increment upload_count for email.
  * @param {string} email
  * @param {number} additionalCount
@@ -122,6 +138,25 @@ export async function getDefaultLogoSignedUrl(storagePath) {
     return data.signedUrl
   } catch (err) {
     console.error('[supabase] getDefaultLogoSignedUrl:', err.message)
+    return null
+  }
+}
+
+/**
+ * Download default logo from Storage (for same-origin serving; avoids CORS).
+ * @param {string} storagePath
+ * @returns {Promise<{ buffer: Buffer, contentType: string } | null>}
+ */
+export async function getDefaultLogoBuffer(storagePath) {
+  if (!client || !storagePath) return null
+  try {
+    const { data, error } = await client.storage.from(BUCKET).download(storagePath)
+    if (error || !data) return null
+    const buffer = Buffer.from(await data.arrayBuffer())
+    const contentType = storagePath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg'
+    return { buffer, contentType }
+  } catch (err) {
+    console.error('[supabase] getDefaultLogoBuffer:', err.message)
     return null
   }
 }
