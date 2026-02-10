@@ -11,7 +11,6 @@ interface AttractiveResultsPanelProps {
   emailDeliveryOn: boolean
   onMagicLinkSent?: (email: string) => void
   onConfirmBlockEmailChange?: (email: string) => void
-  onSaveDefaults: (checked: boolean) => void
   onStartOver: () => void
   initialEmail?: string
   resultsEmailSent?: boolean
@@ -26,7 +25,6 @@ export function AttractiveResultsPanel({
   emailDeliveryOn: _emailDeliveryOn,
   onMagicLinkSent,
   onConfirmBlockEmailChange,
-  onSaveDefaults,
   onStartOver,
   initialEmail,
   resultsEmailSent = false,
@@ -64,13 +62,6 @@ export function AttractiveResultsPanel({
             Files sent to your email. You can also download below.
           </p>
         )}
-        <div className="flex flex-wrap gap-4 items-center mb-5">
-          <label className="flex items-center gap-2 cursor-pointer" title="Overwrites your stored default with this run’s options (steps 1–2).">
-            <input type="checkbox" onChange={(e) => onSaveDefaults(e.target.checked)} className="rounded border-slate-300 text-violet-600 focus:ring-violet-500" />
-            <span className="text-sm text-slate-600">Save as default</span>
-          </label>
-          <span className="text-xs text-slate-400">Overwrites stored default with this run’s setup.</span>
-        </div>
         <ul className="space-y-2">
           {files.map((f) => (
             <li key={f.id} className="flex items-center justify-between gap-3 py-3 px-4 rounded-xl bg-slate-50 border border-slate-100">

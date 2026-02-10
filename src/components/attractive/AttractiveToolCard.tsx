@@ -114,9 +114,10 @@ interface AttractiveToolCardProps {
   loadedDefaults?: StoredDefaults | null
   onDefaultsApplied?: () => void
   onLoadDefaultsClick?: () => void
+  onRequestSaveDefaults?: (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>) => void
 }
 
-export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefaults, onDefaultsApplied, onLoadDefaultsClick }: AttractiveToolCardProps) {
+export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefaults, onDefaultsApplied, onLoadDefaultsClick, onRequestSaveDefaults }: AttractiveToolCardProps) {
   const [files, setFiles] = useState<File[]>([])
   const [mode, setMode] = useState<WatermarkMode>(() => getStoredDefaults()?.mode ?? 'text')
   const [text, setText] = useState(() => getStoredDefaults()?.text ?? '')
@@ -214,7 +215,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
               Follow the steps in order — each leads to the next.
             </p>
             <p className="text-xs text-slate-500 mt-1 break-words">
-              Defaults pre-fill steps 1–2. You can change them for this run; your saved default stays until you overwrite it with &quot;Save as default&quot;.
+              Use &quot;Save as default&quot; in steps 1 and 2 to remember your choices for next time.
             </p>
           </div>
           {onLoadDefaultsClick && (
@@ -289,6 +290,15 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                     <span className="text-xs text-slate-500 font-medium">{text.length}/{MAX_TEXT_LEN}</span>
                   </>
                 )}
+                {onRequestSaveDefaults && (
+                  <button
+                    type="button"
+                    onClick={() => onRequestSaveDefaults({ mode, text: mode === 'text' ? text : undefined, template, scope })}
+                    className="self-start text-xs font-semibold text-violet-600 hover:text-violet-800 hover:underline underline-offset-2 mt-0.5"
+                  >
+                    Save as default
+                  </button>
+                )}
               </div>
             </StepTile>
             <StepConnector isLast={false} />
@@ -318,6 +328,15 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                     { value: 'first-page-only', label: 'First page only' },
                   ]}
                 />
+                {onRequestSaveDefaults && (
+                  <button
+                    type="button"
+                    onClick={() => onRequestSaveDefaults({ mode, text: mode === 'text' ? text : undefined, template, scope })}
+                    className="self-start text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline underline-offset-2 mt-0.5"
+                  >
+                    Save as default
+                  </button>
+                )}
               </div>
             </StepTile>
             <StepConnector isLast={false} />

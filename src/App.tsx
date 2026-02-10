@@ -43,6 +43,8 @@ function App() {
   const [showSaveDefaultsModal, setShowSaveDefaultsModal] = useState(false)
   const [loadDefaultsLoading, setLoadDefaultsLoading] = useState(false)
   const [saveDefaultsLoading, setSaveDefaultsLoading] = useState(false)
+  /** When user clicks "Save as default" in step 1 or 2, we store the chosen defaults until modal submit. */
+  const [pendingSaveDefaults, setPendingSaveDefaults] = useState<Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'> | null>(null)
   /** Email typed in the "Confirm email to download" block – use for toggle/save so we don't ask again. */
   const [emailFromConfirmBlock, setEmailFromConfirmBlock] = useState('')
   /** For the current results: did user choose "Email me files" in step 4? (so we send email and don't auto-download) */
@@ -383,12 +385,10 @@ function App() {
     })
   }
 
-  const onSaveDefaults = (checked: boolean) => {
-    if (!checked) {
-      setShowSaveDefaultsModal(false)
-      return
-    }
+  /** Called from step 1 or step 2 when user clicks "Save as default". Uses current tool options; shows email modal if needed. */
+  const onRequestSaveDefaults = (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>) => {
     track(AnalyticsEvents.SaveDefaultsClicked)
+    setPendingSaveDefaults(defaults)
     const emailToUse = (userEmail || emailFromConfirmBlock.trim() || '').toLowerCase() || null
     if (emailToUse) {
       if (!userEmail) {
@@ -401,30 +401,30 @@ function App() {
           // ignore
         }
       }
-      if (lastUsedOptions) {
-        setSaveDefaultsLoading(true)
-        saveDefaultsToApi(emailToUse, lastUsedOptions)
-          .then(() => {
-            track(AnalyticsEvents.SaveDefaultsSuccess)
-            setShowSaveDefaultsModal(false)
-          })
-          .finally(() => setSaveDefaultsLoading(false))
-        return
-      }
+      setSaveDefaultsLoading(true)
+      saveDefaultsToApi(emailToUse, defaults)
+        .then(() => {
+          track(AnalyticsEvents.SaveDefaultsSuccess)
+          setPendingSaveDefaults(null)
+        })
+        .finally(() => setSaveDefaultsLoading(false))
+      return
     }
     setShowSaveDefaultsModal(true)
   }
 
   const onSaveDefaultsModalSubmit = async (email: string) => {
-    if (!lastUsedOptions) return
+    const toSave = pendingSaveDefaults ?? lastUsedOptions
+    if (!toSave) return
     setSaveDefaultsLoading(true)
     try {
       const normalized = email.trim().toLowerCase()
-      await saveDefaultsToApi(normalized, lastUsedOptions)
+      await saveDefaultsToApi(normalized, toSave)
       setUserEmail(normalized)
       setAnalyticsUserId(normalized)
       track(AnalyticsEvents.SaveDefaultsSuccess)
       setShowSaveDefaultsModal(false)
+      setPendingSaveDefaults(null)
     } finally {
       setSaveDefaultsLoading(false)
     }
@@ -479,7 +479,7 @@ function App() {
         onEmailToggleClick={onEmailToggleClick}
         onMagicLinkEmailSent={onMagicLinkEmailSent}
         onConfirmBlockEmailChange={setEmailFromConfirmBlock}
-        onSaveDefaults={onSaveDefaults}
+        onRequestSaveDefaults={onRequestSaveDefaults}
         onStartOver={onStartOver}
         onLoadDefaultsClick={onLoadDefaultsClick}
         loadedDefaults={loadedDefaults}
@@ -506,7 +506,7 @@ function App() {
 
       <EmailPromptModal
         open={showSaveDefaultsModal}
-        onClose={() => setShowSaveDefaultsModal(false)}
+        onClose={() => { setShowSaveDefaultsModal(false); setPendingSaveDefaults(null) }}
         title="Enter your email to save these settings as default"
         submitLabel="Save"
         onSubmit={onSaveDefaultsModalSubmit}

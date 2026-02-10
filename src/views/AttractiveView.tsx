@@ -22,7 +22,7 @@ export interface AttractiveViewProps {
   onEmailToggleClick: () => void
   onMagicLinkEmailSent?: (email: string) => void
   onConfirmBlockEmailChange?: (email: string) => void
-  onSaveDefaults: (checked: boolean) => void
+  onRequestSaveDefaults: (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>) => void
   onStartOver: () => void
   onLoadDefaultsClick: () => void
   loadedDefaults: StoredDefaults | null
@@ -43,7 +43,7 @@ export function AttractiveView({
   onEmailToggleClick,
   onMagicLinkEmailSent,
   onConfirmBlockEmailChange,
-  onSaveDefaults,
+  onRequestSaveDefaults,
   onStartOver,
   onLoadDefaultsClick,
   loadedDefaults,
@@ -82,6 +82,7 @@ export function AttractiveView({
                 loadedDefaults={loadedDefaults}
                 onDefaultsApplied={onDefaultsApplied}
                 onLoadDefaultsClick={onLoadDefaultsClick}
+                onRequestSaveDefaults={onRequestSaveDefaults}
               />
               <div className="flex flex-wrap justify-center gap-x-5 gap-y-1.5 text-sm text-white/85">
                 <span className="text-white/90 font-medium">Used by</span>
@@ -118,7 +119,6 @@ export function AttractiveView({
                 emailDeliveryOn={emailDeliveryToggled}
                 onMagicLinkSent={onMagicLinkEmailSent}
                 onConfirmBlockEmailChange={onConfirmBlockEmailChange}
-                onSaveDefaults={onSaveDefaults}
                 onStartOver={onStartOver}
                 initialEmail={userEmail ?? undefined}
                 resultsEmailSent={resultsEmailSent}
