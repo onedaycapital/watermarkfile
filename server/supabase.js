@@ -169,8 +169,16 @@ export async function getDefaultLogoBuffer(storagePath) {
 export async function getUserDefaults(email) {
   if (!client) return null
   try {
+    const supabaseHost = url ? new URL(url).hostname : 'none'
     const { data, error } = await client.from('user_defaults').select('mode, text_value, template, scope, logo_storage_path').ilike('email', email).maybeSingle()
-    if (error || !data) return null
+    if (error) {
+      console.error('[supabase] getUserDefaults error:', error.message, 'code:', error.code)
+      return null
+    }
+    if (!data) {
+      console.log('[supabase] getUserDefaults no row for email=', email, 'host=', supabaseHost)
+      return null
+    }
     return {
       mode: data.mode || 'text',
       text: data.text_value || '',
