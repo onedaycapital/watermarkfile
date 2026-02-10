@@ -35,7 +35,7 @@ export function AttractiveHero() {
 
         {/* Supporting line — readable but clearly secondary */}
         <p className="mt-4 md:mt-5 text-base md:text-lg text-white/90 max-w-xl mx-auto font-medium">
-          Add watermarks to PDFs and images. Fast. No hassle.
+          Add watermarks to PDFs and images. Fast. No hassle. <strong>OCR Friendly.</strong>
         </p>
 
         {/* Document types — clear, not competing with hero */}
