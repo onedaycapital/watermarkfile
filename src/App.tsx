@@ -4,7 +4,7 @@ import { EmailCaptureModal } from './components/EmailCaptureModal'
 import { EmailPromptModal } from './components/EmailPromptModal'
 import type { PipelineState, ProcessedFile, WatermarkOptions } from './types'
 import type { StoredDefaults } from './lib/defaults'
-import { setStoredDefaults } from './lib/defaults'
+import { setStoredDefaults, getStoredDefaults } from './lib/defaults'
 import { triggerDownload } from './lib/download'
 import { apiUrl } from './lib/api'
 import {
@@ -108,14 +108,21 @@ function App() {
     return () => { cancelled = true }
   }, [])
 
-  // On every load (new tab, refresh): check user in DB and load defaults if active (from stored email or cookie)
+  // On every load (new tab, refresh): fetch defaults from API; persist to localStorage and apply. If API fails, apply from localStorage so UI still shows saved defaults.
   useEffect(() => {
     const storedEmail = getStoredEmail()
     const url = storedEmail
       ? apiUrl(`/api/defaults?email=${encodeURIComponent(storedEmail)}`)
       : apiUrl('/api/defaults')
     fetch(url, { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (res.ok) return res.json()
+        if (storedEmail) {
+          const local = getStoredDefaults()
+          if (local) setLoadedDefaults({ ...local, logo_url: undefined })
+        }
+        return null
+      })
       .then((data) => {
         if (!data) return
         if (data.email) {
@@ -128,16 +135,23 @@ function App() {
           }
         }
         if (data.mode && data.template && data.scope) {
-          setLoadedDefaults({
+          const next = {
             mode: data.mode,
             text: data.text ?? '',
             template: data.template,
             scope: data.scope,
             logo_url: data.logo_url,
-          })
+          }
+          setStoredDefaults({ mode: next.mode, text: next.text, template: next.template, scope: next.scope })
+          setLoadedDefaults(next)
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (storedEmail) {
+          const local = getStoredDefaults()
+          if (local) setLoadedDefaults({ ...local, logo_url: undefined })
+        }
+      })
   }, [])
 
   /** Sequential uploads so each request stays under Vercel's ~4.5 MB serverless body limit. */
@@ -494,19 +508,28 @@ function App() {
   const onLoadDefaultsModalSubmit = async (email: string) => {
     setLoadDefaultsLoading(true)
     try {
-      const res = await fetch(apiUrl(`/api/defaults?email=${encodeURIComponent(email.trim().toLowerCase())}`))
+      const res = await fetch(apiUrl(`/api/defaults?email=${encodeURIComponent(email.trim().toLowerCase())}`), { credentials: 'include' })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error || 'No saved settings for this email')
       }
       const data = await res.json()
-      setLoadedDefaults({
+      const normalized = (data.email || email).trim().toLowerCase()
+      setUserEmail(normalized)
+      try {
+        localStorage.setItem(EMAIL_STORAGE_KEY, normalized)
+      } catch {
+        /* ignore */
+      }
+      const next = {
         mode: data.mode,
-        text: data.text,
+        text: data.text ?? '',
         template: data.template,
         scope: data.scope,
         logo_url: data.logo_url,
-      })
+      }
+      setStoredDefaults({ mode: next.mode, text: next.text, template: next.template, scope: next.scope })
+      setLoadedDefaults(next)
       track(AnalyticsEvents.LoadDefaultsSuccess)
       setShowLoadDefaultsModal(false)
     } catch (err) {

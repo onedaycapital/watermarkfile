@@ -169,7 +169,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
       setLogoFile(null)
     }
     const clear = onDefaultsApplied
-    const t = setTimeout(() => clear?.(), 0)
+    const t = setTimeout(() => clear?.(), 150)
     return () => clearTimeout(t)
   }, [loadedDefaults, onDefaultsApplied])
 
