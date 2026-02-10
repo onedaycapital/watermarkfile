@@ -174,7 +174,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
           .then((file) => {
             if (!cancelled) setLogoFile(file)
           })
-          .catch((err) => {
+          .catch(() => {
             if (attempt > 0 || cancelled) return
             return new Promise<void>((r) => setTimeout(r, 400)).then(() => tryFetch(1))
           })
