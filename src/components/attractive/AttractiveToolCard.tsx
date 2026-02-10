@@ -213,16 +213,16 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
   return (
     <section className="w-full max-w-[52rem] md:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-w-0" aria-label="Watermark tool">
       <div className="rounded-3xl border border-slate-200/90 bg-white shadow-card-accent overflow-hidden min-w-0">
-        <div className="px-4 py-4 md:px-8 md:py-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 via-violet-50/50 to-slate-50 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-bold text-slate-900 tracking-tight">
+        <div className="px-4 py-4 md:px-8 md:py-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 via-violet-50/50 to-slate-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="min-w-0 flex-1 text-center">
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
               Create your watermarked files
             </h2>
             <p className="text-sm text-slate-600 mt-1 font-medium break-words">
               Follow the steps in order — each leads to the next.
             </p>
             <p className="text-xs text-slate-500 mt-1 break-words">
-              Use &quot;Save as default&quot; in steps 1 and 2 to remember your choices for next time.
+              Use &quot;Save as default&quot; in steps 1 and 2 to remember your choices — and to get watermarked files back by email when you send files to our address.
             </p>
           </div>
           {onLoadDefaultsClick && (

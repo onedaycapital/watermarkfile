@@ -24,7 +24,7 @@ export interface AttractiveViewProps {
   onConfirmBlockEmailChange?: (email: string) => void
   onRequestSaveDefaults: (defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>) => void
   onStartOver: () => void
-  onLoadDefaultsClick: () => void
+  onLoadDefaultsClick?: () => void
   loadedDefaults: StoredDefaults | null
   onDefaultsApplied: () => void
   userEmail?: string | null

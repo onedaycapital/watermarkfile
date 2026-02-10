@@ -4,6 +4,7 @@ import { EmailCaptureModal } from './components/EmailCaptureModal'
 import { EmailPromptModal } from './components/EmailPromptModal'
 import type { PipelineState, ProcessedFile, WatermarkOptions } from './types'
 import type { StoredDefaults } from './lib/defaults'
+import { setStoredDefaults } from './lib/defaults'
 import { triggerDownload } from './lib/download'
 import { apiUrl } from './lib/api'
 import {
@@ -354,11 +355,19 @@ function App() {
 
   async function saveDefaultsToApi(email: string, defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>) {
     const normalized = email.trim().toLowerCase()
-    await fetch(apiUrl('/api/defaults'), {
+    const res = await fetch(apiUrl('/api/defaults'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: normalized, defaults }),
     })
+    if (res.ok) {
+      setStoredDefaults({
+        mode: defaults.mode,
+        text: defaults.text,
+        template: defaults.template,
+        scope: defaults.scope,
+      })
+    }
     try {
       localStorage.setItem(EMAIL_STORAGE_KEY, normalized)
     } catch {
@@ -481,7 +490,7 @@ function App() {
         onConfirmBlockEmailChange={setEmailFromConfirmBlock}
         onRequestSaveDefaults={onRequestSaveDefaults}
         onStartOver={onStartOver}
-        onLoadDefaultsClick={onLoadDefaultsClick}
+        onLoadDefaultsClick={userEmail ? undefined : onLoadDefaultsClick}
         loadedDefaults={loadedDefaults}
         onDefaultsApplied={onDefaultsApplied}
         userEmail={userEmail}

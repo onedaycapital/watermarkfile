@@ -29,3 +29,11 @@ export function getStoredDefaults(): StoredDefaults | null {
     return null
   }
 }
+
+export function setStoredDefaults(defaults: StoredDefaults): void {
+  try {
+    localStorage.setItem(DEFAULTS_STORAGE_KEY, JSON.stringify(defaults))
+  } catch {
+    // ignore
+  }
+}
