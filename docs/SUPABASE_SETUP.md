@@ -103,8 +103,16 @@ If these are **not** set, the app still works: watermarking and in-memory downlo
 
 When both env vars are set and a request includes a valid `email` (e.g. from the magic-link flow):
 
-- **user_stats:** Upserts by `email`, increments `upload_count`, sets `last_uploaded_at` and `updated_at`.
+- **user_stats:** Upserts by `email`, increments `upload_count`, sets `last_uploaded_at`, `updated_at`, and on first insert **first_used_at** (date/time of first usage for that email). Tracks **usage_count_this_month** and **usage_period_start** for optional monthly caps.
 - **uploads:** Inserts a row per saved file (`email`, `file_name`, `storage_path`, `file_size_bytes`, `created_at`).
 - **Storage:** Uploads the **original** (un-watermarked) file to `watermarked-files/{sanitized_email}/{date}/{id}_{filename}`.
 
 The watermarked file is still served from the in-memory store for immediate download; Supabase Storage keeps a persistent copy of the **original** file for your records/audit.
+
+---
+
+## 7. First usage and monthly limits
+
+- **first_used_at:** Set once when a given email first appears in `user_stats` (defaults save, magic link, or watermark). Use this for “first month free” logic: e.g. after 30 days from `first_used_at`, direct the user to a payment/subscribe page (handled in your app or a future admin dashboard).
+- **max_uploads_per_month:** Optional. `NULL` = unlimited (default). When set to an integer (e.g. 100), the backend checks **usage_count_this_month** before processing; if the user would exceed the limit, the API returns **402** with a message asking them to subscribe or wait until next month. Usage resets by calendar month (UTC).
+- **Existing databases:** Run the `ALTER TABLE` and `UPDATE` statements from the bottom of `docs/supabase-schema.sql` once to add the new columns and backfill `first_used_at` from `created_at` where needed.

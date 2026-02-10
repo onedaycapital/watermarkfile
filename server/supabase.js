@@ -22,6 +22,14 @@ function sanitizeEmailForPath(email) {
 }
 
 /**
+ * Start of current month (UTC) as YYYY-MM-DD.
+ */
+function startOfCurrentMonth() {
+  const d = new Date()
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`
+}
+
+/**
  * Check if email exists in user_stats (user has used the app / is "active").
  * @param {string} email
  * @returns {Promise<boolean>}
@@ -38,21 +46,90 @@ export async function hasUserInStats(email) {
 }
 
 /**
- * Upsert user_stats: increment upload_count for email.
+ * Get user_stats for an email (for first-month-free and monthly limit checks).
+ * @param {string} email
+ * @returns {Promise<{ first_used_at: string | null, upload_count: number, max_uploads_per_month: number | null, usage_count_this_month: number, usage_period_start: string | null } | null>}
+ */
+export async function getUserStats(email) {
+  if (!client || !email) return null
+  try {
+    const { data, error } = await client
+      .from('user_stats')
+      .select('first_used_at, upload_count, max_uploads_per_month, usage_count_this_month, usage_period_start')
+      .eq('email', email)
+      .maybeSingle()
+    if (error || !data) return null
+    return {
+      first_used_at: data.first_used_at || null,
+      upload_count: data.upload_count ?? 0,
+      max_uploads_per_month: data.max_uploads_per_month ?? null,
+      usage_count_this_month: data.usage_count_this_month ?? 0,
+      usage_period_start: data.usage_period_start || null,
+    }
+  } catch (err) {
+    console.error('[supabase] getUserStats:', err.message)
+    return null
+  }
+}
+
+/**
+ * Check if user can process more files this month (within max_uploads_per_month if set).
+ * @param {string} email
+ * @param {number} [additionalCount=1] - files they want to process in this request
+ * @returns {Promise<{ allowed: boolean, reason?: string }>}
+ */
+export async function checkMonthlyLimit(email, additionalCount = 1) {
+  const stats = await getUserStats(email)
+  if (!stats) return { allowed: true }
+  const max = stats.max_uploads_per_month
+  if (max == null) return { allowed: true }
+  const periodStart = stats.usage_period_start || startOfCurrentMonth()
+  const nowStart = startOfCurrentMonth()
+  const countThisMonth = periodStart === nowStart ? stats.usage_count_this_month : 0
+  if (countThisMonth + additionalCount > max) {
+    return {
+      allowed: false,
+      reason: 'Monthly file limit reached. Subscribe or wait until next month to continue.',
+    }
+  }
+  return { allowed: true }
+}
+
+/**
+ * Upsert user_stats: set first_used_at on first use, increment upload_count and usage_count_this_month.
  * @param {string} email
  * @param {number} additionalCount
  */
 export async function upsertUserStats(email, additionalCount = 1) {
   if (!client) return
   try {
-    const { data: existing } = await client.from('user_stats').select('upload_count').eq('email', email).single()
-    const newCount = (existing?.upload_count ?? 0) + additionalCount
+    const now = new Date().toISOString()
+    const periodStart = startOfCurrentMonth()
+    const { data: existing } = await client
+      .from('user_stats')
+      .select('upload_count, first_used_at, usage_count_this_month, usage_period_start')
+      .eq('email', email)
+      .maybeSingle()
+
+    const isNew = !existing
+    const newUploadCount = (existing?.upload_count ?? 0) + additionalCount
+    let usageCountThisMonth = existing?.usage_count_this_month ?? 0
+    let usagePeriodStart = existing?.usage_period_start || periodStart
+    if (usagePeriodStart !== periodStart) {
+      usageCountThisMonth = 0
+      usagePeriodStart = periodStart
+    }
+    usageCountThisMonth += additionalCount
+
     await client.from('user_stats').upsert(
       {
         email,
-        upload_count: newCount,
-        last_uploaded_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        upload_count: newUploadCount,
+        last_uploaded_at: now,
+        updated_at: now,
+        ...(isNew ? { first_used_at: now } : {}),
+        usage_count_this_month: usageCountThisMonth,
+        usage_period_start: usagePeriodStart,
       },
       { onConflict: 'email' }
     )

@@ -1,12 +1,23 @@
 -- WatermarkFile Supabase schema (copy this entire file into SQL Editor; do not paste markdown)
--- User stats: email + upload count
+-- User stats: email + upload count + first usage (for first-month-free) + optional monthly cap
 CREATE TABLE IF NOT EXISTS public.user_stats (
   email text PRIMARY KEY,
   upload_count int NOT NULL DEFAULT 0,
   last_uploaded_at timestamptz,
+  first_used_at timestamptz,
+  max_uploads_per_month int DEFAULT NULL,
+  usage_count_this_month int NOT NULL DEFAULT 0,
+  usage_period_start date DEFAULT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- If table already exists, add new columns (run once):
+-- ALTER TABLE public.user_stats ADD COLUMN IF NOT EXISTS first_used_at timestamptz;
+-- ALTER TABLE public.user_stats ADD COLUMN IF NOT EXISTS max_uploads_per_month int DEFAULT NULL;
+-- ALTER TABLE public.user_stats ADD COLUMN IF NOT EXISTS usage_count_this_month int NOT NULL DEFAULT 0;
+-- ALTER TABLE public.user_stats ADD COLUMN IF NOT EXISTS usage_period_start date DEFAULT NULL;
+-- UPDATE public.user_stats SET first_used_at = created_at WHERE first_used_at IS NULL;
 
 -- Optional: log each saved file for listing/audit
 CREATE TABLE IF NOT EXISTS public.uploads (

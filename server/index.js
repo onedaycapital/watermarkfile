@@ -17,7 +17,7 @@ import {
   cleanupExpiredTokens,
 } from './store.js'
 import { sendMagicLinkEmail, sendReplyWithAttachments } from './email.js'
-import { upsertUserStats, saveFileToStorage, saveDefaultLogo, getDefaultLogoBuffer, isSupabaseConfigured, getUserDefaults, upsertUserDefaults, hasUserInStats } from './supabase.js'
+import { upsertUserStats, saveFileToStorage, saveDefaultLogo, getDefaultLogoBuffer, isSupabaseConfigured, getUserDefaults, upsertUserDefaults, hasUserInStats, checkMonthlyLimit } from './supabase.js'
 import { processInboundEmail } from './inbound.js'
 
 const app = express()
@@ -179,6 +179,13 @@ app.post('/api/auth/send-magic-link', async (req, res) => {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'Valid email required' })
     }
+    const fileCount = Array.isArray(pendingDelivery) ? pendingDelivery.length : 0
+    if (isSupabaseConfigured()) {
+      const limitCheck = await checkMonthlyLimit(email, fileCount)
+      if (!limitCheck.allowed) {
+        return res.status(402).json({ error: limitCheck.reason || 'Monthly file limit reached.' })
+      }
+    }
     const token = uuidv4()
     const expiresAt = Date.now() + MAGIC_LINK_EXPIRY_MS
     setMagicToken(token, { email, expiresAt })
@@ -187,7 +194,6 @@ app.post('/api/auth/send-magic-link', async (req, res) => {
     }
     // Record user and file count the minute they submit on page 2 (first-time user)
     if (isSupabaseConfigured()) {
-      const fileCount = Array.isArray(pendingDelivery) ? pendingDelivery.length : 0
       upsertUserStats(email, fileCount).catch((err) => console.error('[supabase] upsertUserStats (send-magic-link):', err.message))
       // Save cached originals (from first run without email) to Storage and uploads table
       if (Array.isArray(pendingDelivery) && pendingDelivery.length > 0) {
@@ -369,6 +375,15 @@ app.post('/api/watermark', upload.fields([
     }
     if (mode === 'logo' && !logoFile) {
       return res.status(400).json({ error: 'Logo watermark requires "logo" file' })
+    }
+
+    const emailForLimit = (req.body.email || '').toString().trim().toLowerCase()
+    const hasEmailForLimit = emailForLimit && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailForLimit)
+    if (hasEmailForLimit && isSupabaseConfigured()) {
+      const limitCheck = await checkMonthlyLimit(emailForLimit, files.length)
+      if (!limitCheck.allowed) {
+        return res.status(402).json({ error: limitCheck.reason || 'Monthly file limit reached.' })
+      }
     }
 
     const results = []
