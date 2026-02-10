@@ -35,7 +35,7 @@ git push origin main
 
 ---
 
-## 4. Connect frontend to backend
+## 4. Connect frontend to backend (required for watermark + default logo)
 
 1. In Vercel, open your project → **Settings** → **Environment Variables**.
 2. Add:
@@ -43,6 +43,8 @@ git push origin main
    - **Value:** your Railway API URL from step 2 (e.g. `https://watermarkfile-production-xxxx.up.railway.app`) — **no trailing slash**.
    - Apply to **Production** (and Preview if you want).
 3. Go to **Deployments** → open the **⋯** on the latest deployment → **Redeploy** (so the new env var is used).
+
+Without this, all API calls (including fetching the default logo when step 1 default is “Logo”) go to the Vercel host and fail. Set it and redeploy so the built app has the correct API base.
 
 ---
 

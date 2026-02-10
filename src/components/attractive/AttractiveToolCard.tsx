@@ -150,7 +150,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     return () => URL.revokeObjectURL(url)
   }, [logoFile])
 
-  // Apply loaded defaults (step 1: logo or text; step 2: template/scope). Show checkmarks to indicate defaults are loaded. Logo: fetch by logo_url or by userEmail when mode is logo; retry once; clear onDefaultsApplied after fetch completes.
+  // Apply loaded defaults. When step 1 default is logo: fetch logo from API and display it. One path only: build URL from email, fetch, set logo file.
   useEffect(() => {
     if (!loadedDefaults) return
     let cancelled = false
@@ -161,36 +161,31 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     setSaveAsDefaultStep1(true)
     setSaveAsDefaultStep2(true)
     const clear = onDefaultsApplied
-    const email = userEmail?.trim().toLowerCase()
-    const logoUrlFromDefaults = loadedDefaults.logo_url
-      ? (loadedDefaults.logo_url.startsWith('/') ? apiUrl(loadedDefaults.logo_url) : loadedDefaults.logo_url)
-      : (email ? apiUrl(`/api/defaults/logo?email=${encodeURIComponent(email)}`) : null)
-    if (loadedDefaults.mode === 'logo' && logoUrlFromDefaults) {
-      const tryFetch = (attempt: number): Promise<void> =>
-        fetch(logoUrlFromDefaults, { credentials: 'include' })
-          .then((r) => {
-            if (!r.ok) throw new Error(`Logo ${r.status}`)
-            return r.blob().then((blob) => {
-              const type = blob.type || (r.headers.get('Content-Type') ?? '').split(';')[0].trim() || 'image/png'
-              return new File([blob], 'default-logo.png', { type })
-            })
-          })
-          .then((file) => {
-            if (!cancelled) setLogoFile(file)
-          })
-          .catch(() => {
-            if (attempt > 0 || cancelled) return
-            return new Promise<void>((r) => setTimeout(r, 400)).then(() => tryFetch(1))
-          })
-      tryFetch(0).finally(() => {
-        if (!cancelled) clear?.()
-      })
-      return () => {
-        cancelled = true
-      }
+    const email = (loadedDefaults.email || userEmail)?.trim().toLowerCase()
+    if (loadedDefaults.mode === 'logo' && email) {
+      const logoUrl = apiUrl(`/api/defaults/logo?email=${encodeURIComponent(email)}`)
+      fetch(logoUrl, { credentials: 'include' })
+        .then((r) => {
+          if (!r.ok) throw new Error(`Logo ${r.status}`)
+          return r.blob()
+        })
+        .then((blob) => {
+          const type = blob.type || 'image/png'
+          return new File([blob], 'default-logo.png', { type })
+        })
+        .then((file) => {
+          if (!cancelled) setLogoFile(file)
+        })
+        .catch(() => {
+          if (!cancelled) setLogoFile(null)
+        })
+        .finally(() => {
+          if (!cancelled) clear?.()
+        })
+      return () => { cancelled = true }
     }
     setLogoFile(null)
-    const t = setTimeout(() => clear?.(), 100)
+    const t = setTimeout(() => clear?.(), 50)
     return () => {
       cancelled = true
       clearTimeout(t)

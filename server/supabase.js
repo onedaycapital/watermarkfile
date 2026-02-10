@@ -169,7 +169,7 @@ export async function getDefaultLogoBuffer(storagePath) {
 export async function getUserDefaults(email) {
   if (!client) return null
   try {
-    const { data, error } = await client.from('user_defaults').select('mode, text_value, template, scope, logo_storage_path').eq('email', email).single()
+    const { data, error } = await client.from('user_defaults').select('mode, text_value, template, scope, logo_storage_path').ilike('email', email).maybeSingle()
     if (error || !data) return null
     return {
       mode: data.mode || 'text',

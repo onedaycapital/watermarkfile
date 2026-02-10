@@ -1,11 +1,1 @@
-{
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "framework": "vite",
-  "rewrites": [
-    {
-      "source": "/((?!api|assets|favicon|logo).*)",
-      "destination": "/index.html"
-    }
-  ]
-}
+{"buildCommand":"npm run build","outputDirectory":"dist","framework":"vite","rewrites":[{"source":"/((?!api|assets|favicon|logo).*)","destination":"/index.html"}]}

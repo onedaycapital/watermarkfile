@@ -96,12 +96,14 @@ function App() {
       .then((res) => (res?.ok ? res.json() : null))
       .then((data) => {
         if (cancelled || !data?.mode) return
+        const norm = (data.email || email).trim().toLowerCase()
         setLoadedDefaults({
           mode: data.mode,
           text: data.text,
           template: data.template,
           scope: data.scope,
           logo_url: data.logo_url,
+          email: norm,
         })
       })
       .catch(() => {})
@@ -134,12 +136,14 @@ function App() {
           }
         }
         if (data.mode && data.template && data.scope) {
+          const emailNorm = data.email?.trim().toLowerCase()
           const next = {
             mode: data.mode,
             text: data.text ?? '',
             template: data.template,
             scope: data.scope,
             logo_url: data.logo_url,
+            email: emailNorm,
           }
           setStoredDefaults({ mode: next.mode, text: next.text, template: next.template, scope: next.scope })
           setLoadedDefaults(next)
@@ -531,6 +535,7 @@ function App() {
         template: data.template,
         scope: data.scope,
         logo_url: data.logo_url,
+        email: normalized,
       }
       setStoredDefaults({ mode: next.mode, text: next.text, template: next.template, scope: next.scope })
       setLoadedDefaults(next)

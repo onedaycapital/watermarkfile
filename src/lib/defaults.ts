@@ -9,6 +9,8 @@ export interface StoredDefaults {
   scope: Scope
   /** Set when loaded from API; used to show default logo and create a File for the next watermark */
   logo_url?: string
+  /** Email for the user whose defaults these are; used to fetch default logo when mode is logo */
+  email?: string
 }
 
 export function getStoredDefaults(): StoredDefaults | null {
