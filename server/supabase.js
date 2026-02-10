@@ -200,10 +200,12 @@ export async function saveLogoAsset(email, buffer, contentType, opts = {}) {
       const msg = uploadError.message || 'Storage upload failed'
       throw new Error(msg.includes('Bucket') ? 'Storage bucket missing or not configured. Check Supabase Storage.' : `Logo upload failed: ${msg}`)
     }
+    // Insert with is_default: false so we never violate the unique constraint (one default per email).
+    // If this should be the default, setDefaultLogo() will clear the previous default and set this one.
     const { error: insertError } = await client.from('user_logo_assets').insert({
       email: email.toLowerCase().trim(),
       storage_path: storagePath,
-      is_default: setAsDefault,
+      is_default: false,
     })
     if (insertError) {
       console.error('[supabase] saveLogoAsset insert:', insertError.message)
