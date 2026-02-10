@@ -73,7 +73,8 @@ export async function processInboundEmail(opts) {
 
   let Resend
   try {
-    Resend = (await import('resend')).default
+    const mod = await import('resend')
+    Resend = mod.Resend || mod.default
   } catch (e) {
     console.error('[inbound] resend package not available:', e.message)
     return { to: senderEmail, subject: 'WatermarkFile – error', text: 'Service temporarily unavailable.' }

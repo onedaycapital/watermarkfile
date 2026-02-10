@@ -37,7 +37,7 @@ async function sendViaResend({ to, subject, text, html, attachments = [] }) {
   const apiKey = (process.env.RESEND_API_KEY || '').toString().trim()
   if (!apiKey) return null
   try {
-    const Resend = (await import('resend')).default
+    const { Resend } = await import('resend')
     const resend = new Resend(apiKey)
     const payload = {
       from: getFrom(),
