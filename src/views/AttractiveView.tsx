@@ -59,7 +59,7 @@ function LiveStatsSection() {
     <section className="w-full max-w-4xl mx-auto px-4 py-8" aria-label="Stats">
       <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm overflow-hidden">
         <div className="flex flex-wrap justify-center items-stretch divide-x divide-slate-500/40">
-          {stats.map((stat, i) => (
+          {stats.map((stat) => (
             <div key={stat.label} className="flex-1 min-w-[140px] px-4 py-6 text-center">
               <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-white tabular-nums">
                 {stat.value}
