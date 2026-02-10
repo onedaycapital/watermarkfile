@@ -126,6 +126,7 @@ app.get('/api/defaults/logo', async (req, res) => {
 // 12 offerings: (Logo|Text) × (Diagonal|Repeating|Footer) × (All Pages|First Page Only) — each a unique default
 const TEMPLATES_LIST = ['diagonal-center', 'repeating-pattern', 'footer-tag']
 const SCOPES_LIST = ['all-pages', 'first-page-only']
+const UNSUPPORTED_FORMAT_MESSAGE = 'Unsupported file format. Accepted formats: PDF, JPG, JPEG, PNG, WebP.'
 
 // POST /api/defaults — save defaults for email (body: { email, defaults: { mode, text?, template, scope } })
 app.post('/api/defaults', async (req, res) => {
@@ -409,8 +410,8 @@ app.post('/api/watermark', upload.fields([
           contentType = out.contentType
           outExt = out.ext
         } else {
-          results.push({ id, name: file.originalname, status: 'error', errorMessage: 'Unsupported file type' })
-          failReasons.push('Unsupported file type')
+          results.push({ id, name: file.originalname, status: 'error', errorMessage: UNSUPPORTED_FORMAT_MESSAGE })
+          failReasons.push(UNSUPPORTED_FORMAT_MESSAGE)
           continue
         }
 
@@ -442,7 +443,9 @@ app.post('/api/watermark', upload.fields([
           saveFileToStorage(emailForSupabase, file.originalname, file.buffer, file.mimetype).catch((err) => console.error('[supabase] saveFileToStorage:', err.message))
         }
       } catch (err) {
-        const msg = err.message || 'Processing failed'
+        const rawMsg = err.message || 'Processing failed'
+        const isFormatError = /SOI|input buffer|unsupported format|decode|Expected JPEG|not a supported image format/i.test(rawMsg)
+        const msg = isFormatError ? UNSUPPORTED_FORMAT_MESSAGE : rawMsg
         results.push({
           id,
           name: file.originalname,

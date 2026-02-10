@@ -5,7 +5,7 @@ import { apiUrl } from '../../lib/api'
 import { track, AnalyticsEvents, getFileExtension } from '../../lib/analytics'
 import { IconUpload, IconChevronRight, IconChevronDown, IconDownload, IconText, IconImage } from './Icons'
 
-const ACCEPT = '.pdf,.jpg,.jpeg,.png'
+const ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp'
 const MAX_TEXT_LEN = 60
 
 const VALID_MODES: WatermarkMode[] = ['text', 'logo']
@@ -458,6 +458,9 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
                 Max 4.5 MB per file • 25 MB total per run
               </p>
               <p className="mt-1 text-[11px] text-slate-500 text-center">
+                Accepted formats: PDF, JPG, JPEG, PNG, WebP.
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-500 text-center">
                 Files exceeding limits won't upload — nothing is saved.
               </p>
             </StepTile>
