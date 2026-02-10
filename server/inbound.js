@@ -82,13 +82,29 @@ export async function processInboundEmail(opts) {
   }
 
   const resend = new Resend(apiKey)
-  let listResult
+  let listResult = []
   try {
     const out = await resend.emails.receiving.attachments.list({ emailId })
-    listResult = out.data || []
+    // API returns { data: [...] }; some SDK versions may expose .attachments
+    const raw = out?.data ?? out?.attachments
+    listResult = Array.isArray(raw) ? raw : []
   } catch (e) {
     console.error('[inbound] List attachments failed:', e.message)
-    return { to: senderEmail, subject: 'WatermarkFile – error', text: 'Could not read your attachments. Please try again.' }
+    // Fallback: fetch each attachment by id from webhook meta
+    if (attachmentMeta.length > 0) {
+      for (const meta of attachmentMeta) {
+        try {
+          const one = await resend.emails.receiving.attachments.get({ emailId, id: meta.id })
+          const att = one?.data ?? one
+          if (att?.download_url || att?.url) listResult.push(att)
+        } catch (err) {
+          console.warn('[inbound] Get attachment failed', meta.id, err.message)
+        }
+      }
+    }
+    if (listResult.length === 0) {
+      return { to: senderEmail, subject: 'WatermarkFile – error', text: 'Could not read your attachments. Please try again.' }
+    }
   }
 
   const attachments = []
