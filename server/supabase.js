@@ -49,14 +49,14 @@ export async function hasUserInStats(email) {
 /**
  * Get user_stats for an email (for first-month-free and monthly limit checks).
  * @param {string} email
- * @returns {Promise<{ first_used_at: string | null, upload_count: number, max_uploads_per_month: number | null, usage_count_this_month: number, usage_period_start: string | null } | null>}
+ * @returns {Promise<{ first_used_at: string | null, upload_count: number, max_uploads_per_month: number | null, usage_count_this_month: number, usage_period_start: string | null, referral_code: string | null, referral_count: number, free_months_available: number, referred_by_code: string | null, free_month_used_for: string | null } | null>}
  */
 export async function getUserStats(email) {
   if (!client || !email) return null
   try {
     const { data, error } = await client
       .from('user_stats')
-      .select('first_used_at, upload_count, max_uploads_per_month, usage_count_this_month, usage_period_start')
+      .select('first_used_at, upload_count, max_uploads_per_month, usage_count_this_month, usage_period_start, referral_code, referral_count, free_months_available, referred_by_code, free_month_used_for')
       .eq('email', email)
       .maybeSingle()
     if (error || !data) return null
@@ -66,6 +66,11 @@ export async function getUserStats(email) {
       max_uploads_per_month: data.max_uploads_per_month ?? null,
       usage_count_this_month: data.usage_count_this_month ?? 0,
       usage_period_start: data.usage_period_start || null,
+      referral_code: data.referral_code || null,
+      referral_count: data.referral_count ?? 0,
+      free_months_available: data.free_months_available ?? 0,
+      referred_by_code: data.referred_by_code || null,
+      free_month_used_for: data.free_month_used_for || null,
     }
   } catch (err) {
     console.error('[supabase] getUserStats:', err.message)
@@ -74,7 +79,16 @@ export async function getUserStats(email) {
 }
 
 /**
+ * Current month as YYYY-MM for free-month tracking.
+ */
+function currentMonthKey() {
+  const d = new Date()
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+/**
  * Check if user can process more files this month (within max_uploads_per_month if set).
+ * If over limit, uses one free month (referral reward) when available.
  * @param {string} email
  * @param {number} [additionalCount=1] - files they want to process in this request
  * @returns {Promise<{ allowed: boolean, reason?: string }>}
@@ -87,13 +101,30 @@ export async function checkMonthlyLimit(email, additionalCount = 1) {
   const periodStart = stats.usage_period_start || startOfCurrentMonth()
   const nowStart = startOfCurrentMonth()
   const countThisMonth = periodStart === nowStart ? stats.usage_count_this_month : 0
-  if (countThisMonth + additionalCount > max) {
-    return {
-      allowed: false,
-      reason: 'Monthly file limit reached. Subscribe or wait until next month to continue.',
+  if (countThisMonth + additionalCount <= max) return { allowed: true }
+
+  const monthKey = currentMonthKey()
+  const alreadyUsedFreeThisMonth = stats.free_month_used_for === monthKey
+  if (stats.free_months_available > 0 && !alreadyUsedFreeThisMonth) {
+    try {
+      await client
+        .from('user_stats')
+        .update({
+          free_months_available: Math.max(0, (stats.free_months_available ?? 0) - 1),
+          free_month_used_for: monthKey,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('email', email)
+      return { allowed: true }
+    } catch (err) {
+      console.error('[supabase] checkMonthlyLimit free month:', err.message)
     }
   }
-  return { allowed: true }
+
+  return {
+    allowed: false,
+    reason: 'Monthly file limit reached. Subscribe or wait until next month to continue.',
+  }
 }
 
 /**
@@ -136,6 +167,96 @@ export async function upsertUserStats(email, additionalCount = 1) {
     )
   } catch (err) {
     console.error('[supabase] upsertUserStats:', err.message)
+  }
+}
+
+/** Generate an 8-character alphanumeric referral code (uppercase for readability). */
+function generateReferralCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let code = ''
+  for (let i = 0; i < 8; i++) code += chars[crypto.randomInt(0, chars.length)]
+  return code
+}
+
+/**
+ * Get or create a unique referral code for an email. Creates user_stats row if missing.
+ * @param {string} email
+ * @returns {Promise<string | null>} referral code or null
+ */
+export async function getOrCreateReferralCode(email) {
+  if (!client || !email) return null
+  const normalized = email.trim().toLowerCase()
+  try {
+    const { data: row } = await client.from('user_stats').select('referral_code').eq('email', normalized).maybeSingle()
+    if (row?.referral_code) return row.referral_code
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const code = generateReferralCode()
+      const { data: existing } = await client.from('user_stats').select('email').eq('referral_code', code).maybeSingle()
+      if (existing) continue
+      const { data: updated } = await client.from('user_stats').update({ referral_code: code, updated_at: new Date().toISOString() }).eq('email', normalized).select('referral_code')
+      if (updated?.length) return code
+      const { error: insertErr } = await client.from('user_stats').insert({
+        email: normalized,
+        upload_count: 0,
+        referral_code: code,
+        updated_at: new Date().toISOString(),
+      })
+      if (!insertErr) return code
+    }
+    return null
+  } catch (err) {
+    console.error('[supabase] getOrCreateReferralCode:', err.message)
+    return null
+  }
+}
+
+/**
+ * Attribute a new user (referee) to a referrer by code. Call once when referee first uses the app with a ref code.
+ * Idempotent: if referee already has referred_by_code set, no-op.
+ * @param {string} referrerCode - from ?ref= or manual entry
+ * @param {string} refereeEmail - the new user's email
+ * @returns {Promise<boolean>} true if attribution was applied
+ */
+export async function attributeReferral(referrerCode, refereeEmail) {
+  if (!client || !referrerCode || !refereeEmail) return false
+  const code = String(referrerCode).trim().toUpperCase()
+  const referee = refereeEmail.trim().toLowerCase()
+  try {
+    const { data: referrerRow } = await client.from('user_stats').select('email, referral_count, free_months_available').eq('referral_code', code).maybeSingle()
+    if (!referrerRow?.email) return false
+    const referrerEmail = referrerRow.email
+    if (referrerEmail === referee) return false
+
+    const { data: refereeRow } = await client.from('user_stats').select('referred_by_code').eq('email', referee).maybeSingle()
+    if (refereeRow?.referred_by_code) return false
+
+    const now = new Date().toISOString()
+    const { data: updatedReferee } = await client.from('user_stats').update({ referred_by_code: code, updated_at: now }).eq('email', referee).select('email')
+    if (!updatedReferee?.length) {
+      const { error: insertErr } = await client.from('user_stats').insert({
+        email: referee,
+        referred_by_code: code,
+        upload_count: 0,
+        updated_at: now,
+      })
+      if (insertErr) return false
+    }
+
+    const newCount = (referrerRow.referral_count ?? 0) + 1
+    const addFreeMonth = newCount % 2 === 0
+    const newFreeMonths = (referrerRow.free_months_available ?? 0) + (addFreeMonth ? 1 : 0)
+    await client
+      .from('user_stats')
+      .update({
+        referral_count: newCount,
+        free_months_available: newFreeMonths,
+        updated_at: now,
+      })
+      .eq('email', referrerEmail)
+    return true
+  } catch (err) {
+    console.error('[supabase] attributeReferral:', err.message)
+    return false
   }
 }
 

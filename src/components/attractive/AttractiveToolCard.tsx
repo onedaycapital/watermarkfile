@@ -176,6 +176,10 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
   const [logoAssets, setLogoAssets] = useState<LogoAsset[]>([])
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
   const [assetPickerLoading, setAssetPickerLoading] = useState<string | null>(null)
+  const [referralPanelOpen, setReferralPanelOpen] = useState(false)
+  const [referralUrl, setReferralUrl] = useState<string | null>(null)
+  const [referralLoading, setReferralLoading] = useState(false)
+  const [referralCopied, setReferralCopied] = useState(false)
   const lastAppliedDefaultsRef = useRef<StoredDefaults | null>(null)
 
   // Logo preview: create object URL when logo file is set, revoke on change/unmount
@@ -329,6 +333,27 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     <section className="w-full max-w-[52rem] md:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-w-0" aria-label="Watermark tool">
       <div className="rounded-3xl border border-slate-200/90 bg-white shadow-card-accent overflow-hidden min-w-0">
         <div className="px-4 py-4 md:px-8 md:py-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 via-violet-50/50 to-slate-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-3 shrink-0 order-first sm:order-none">
+            <button
+              type="button"
+              onClick={() => {
+                setReferralPanelOpen(true)
+                setReferralUrl(null)
+                setReferralCopied(false)
+                const email = (userEmail || loadedDefaults?.email || '').trim().toLowerCase()
+                if (email) {
+                  setReferralLoading(true)
+                  fetch(apiUrl(`/api/referral/url?email=${encodeURIComponent(email)}`), { credentials: 'include' })
+                    .then((r) => (r.ok ? r.json() : null))
+                    .then((data) => { setReferralUrl(data?.url ?? null); setReferralLoading(false) })
+                    .catch(() => setReferralLoading(false))
+                }
+              }}
+              className="text-sm font-semibold text-violet-700 hover:text-violet-800 underline underline-offset-2 transition-colors"
+            >
+              Refer &amp; get free months
+            </button>
+          </div>
           <div className="min-w-0 flex-1 text-center">
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">
               Create Your Watermarked Files
@@ -650,6 +675,65 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
               </li>
             ))}
           </ul>
+        </div>
+      </div>
+    )}
+
+    {referralPanelOpen && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+        onClick={() => setReferralPanelOpen(false)}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Refer & get free months"
+      >
+        <div
+          className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-slate-900">Refer &amp; get free months</h3>
+            <button
+              type="button"
+              onClick={() => setReferralPanelOpen(false)}
+              className="text-slate-400 hover:text-slate-600 p-1 rounded text-xl leading-none"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
+          <p className="text-sm text-slate-600 mb-4">
+            Share your link. Every 2 sign-ups = 1 month free for you. No limit.
+          </p>
+          {referralLoading ? (
+            <p className="text-sm text-slate-500">Loading your link…</p>
+          ) : referralUrl ? (
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={referralUrl}
+                  className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 font-medium"
+                  aria-label="Your referral link"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(referralUrl).then(() => setReferralCopied(true))
+                    setTimeout(() => setReferralCopied(false), 2000)
+                  }}
+                  className="shrink-0 px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700 transition-colors"
+                >
+                  {referralCopied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">
+              Use the app with your email or save defaults first to get your unique referral link.
+            </p>
+          )}
         </div>
       </div>
     )}

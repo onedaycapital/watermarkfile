@@ -15,7 +15,7 @@ import {
   AnalyticsEvents,
   getFileExtension,
 } from './lib/analytics'
-import { getStoredEmail, getIsVerified, setVerified, getMagicTokenFromUrl, clearMagicFromUrl } from './lib/auth'
+import { getStoredEmail, getIsVerified, setVerified, getMagicTokenFromUrl, clearMagicFromUrl, getPendingRef, setPendingRef } from './lib/auth'
 
 export type PipelineStatus = 'idle' | 'uploading' | 'processing' | 'ready' | 'error'
 
@@ -167,6 +167,14 @@ function App() {
     loadDefaultsForUser()
   }, [loadDefaultsForUser])
 
+  // Capture ?ref= from URL (referral link) and store for attribution on first use
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const ref = params.get('ref')?.trim()
+    if (ref) setPendingRef(ref)
+  }, [])
+
   /** Refetch defaults from API and update UI (e.g. after saving new default logo). */
   const refetchDefaultsForEmail = useCallback((email: string) => {
     const normalized = email.trim().toLowerCase()
@@ -253,6 +261,8 @@ function App() {
         // Send email whenever we have it (verified, stored, or from confirm block) so backend can record usage in DB
         const emailToSend = (userEmail || emailFromConfirmBlock.trim() || '').trim().toLowerCase() || null
         if (emailToSend) form.append('email', emailToSend)
+        const pendingRef = getPendingRef()
+        if (pendingRef) form.append('ref', pendingRef)
         if (options.mode === 'logo' && options.logoFile) {
           form.append('logo', options.logoFile)
         }
@@ -425,10 +435,11 @@ function App() {
 
   async function saveDefaultsToApi(email: string, defaults: Pick<WatermarkOptions, 'mode' | 'text' | 'template' | 'scope'>): Promise<void> {
     const normalized = email.trim().toLowerCase()
+    const ref = getPendingRef()
     const res = await fetch(apiUrl('/api/defaults'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: normalized, defaults }),
+      body: JSON.stringify({ email: normalized, defaults, ...(ref ? { ref } : {}) }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
@@ -452,6 +463,8 @@ function App() {
     const form = new FormData()
     form.append('email', normalized)
     form.append('logo', logoFile)
+    const ref = getPendingRef()
+    if (ref) form.append('ref', ref)
     const res = await fetch(apiUrl('/api/defaults/logo'), { method: 'POST', body: form })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error((data?.error as string) || res.statusText || 'Failed to save logo')

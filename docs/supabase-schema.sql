@@ -8,6 +8,11 @@ CREATE TABLE IF NOT EXISTS public.user_stats (
   max_uploads_per_month int DEFAULT NULL,
   usage_count_this_month int NOT NULL DEFAULT 0,
   usage_period_start date DEFAULT NULL,
+  referral_code text UNIQUE,
+  referral_count int NOT NULL DEFAULT 0,
+  free_months_available int NOT NULL DEFAULT 0,
+  referred_by_code text,
+  free_month_used_for text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -19,6 +24,13 @@ CREATE TABLE IF NOT EXISTS public.user_stats (
 -- ALTER TABLE public.user_stats ADD COLUMN IF NOT EXISTS usage_period_start date DEFAULT NULL;
 -- UPDATE public.user_stats SET first_used_at = created_at WHERE first_used_at IS NULL;
 
+-- Ensure referral columns exist (so CREATE INDEX below works on existing DBs)
+ALTER TABLE public.user_stats ADD COLUMN IF NOT EXISTS referral_code text;
+ALTER TABLE public.user_stats ADD COLUMN IF NOT EXISTS referral_count int NOT NULL DEFAULT 0;
+ALTER TABLE public.user_stats ADD COLUMN IF NOT EXISTS free_months_available int NOT NULL DEFAULT 0;
+ALTER TABLE public.user_stats ADD COLUMN IF NOT EXISTS referred_by_code text;
+ALTER TABLE public.user_stats ADD COLUMN IF NOT EXISTS free_month_used_for text;
+
 -- Optional: log each saved file for listing/audit
 CREATE TABLE IF NOT EXISTS public.uploads (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -28,6 +40,9 @@ CREATE TABLE IF NOT EXISTS public.uploads (
   file_size_bytes bigint,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Referral: one unique code per user (for ?ref= links)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_stats_referral_code ON public.user_stats (referral_code) WHERE referral_code IS NOT NULL;
 
 -- Index for listing by user
 CREATE INDEX IF NOT EXISTS idx_uploads_email ON public.uploads (email);

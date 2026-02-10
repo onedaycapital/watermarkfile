@@ -17,7 +17,7 @@ import {
   cleanupExpiredTokens,
 } from './store.js'
 import { sendMagicLinkEmail, sendReplyWithAttachments } from './email.js'
-import { upsertUserStats, saveFileToStorage, saveDefaultLogo, saveLogoAsset, getDefaultLogoBuffer, isSupabaseConfigured, getUserDefaults, upsertUserDefaults, hasUserInStats, checkMonthlyLimit, listLogoAssets, setDefaultLogo } from './supabase.js'
+import { upsertUserStats, saveFileToStorage, saveDefaultLogo, saveLogoAsset, getDefaultLogoBuffer, isSupabaseConfigured, getUserDefaults, upsertUserDefaults, hasUserInStats, checkMonthlyLimit, listLogoAssets, setDefaultLogo, getOrCreateReferralCode, attributeReferral } from './supabase.js'
 import { processInboundEmail } from './inbound.js'
 
 const app = express()
@@ -161,14 +161,29 @@ const TEMPLATES_LIST = ['diagonal-center', 'repeating-pattern', 'footer-tag']
 const SCOPES_LIST = ['all-pages', 'first-page-only']
 const UNSUPPORTED_FORMAT_MESSAGE = 'Unsupported file format. Accepted formats: PDF, JPG, JPEG, PNG, WebP.'
 
-// POST /api/defaults — save defaults for email (body: { email, defaults: { mode, text?, template, scope } })
+// GET /api/referral/url — get referral URL for email (query or cookie). Returns { url, code } or 404.
+app.get('/api/referral/url', async (req, res) => {
+  let email = (req.query.email || '').toString().trim().toLowerCase()
+  if (!email) email = getEmailFromCookie(req) || ''
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Email required' })
+  if (!isSupabaseConfigured()) return res.status(503).json({ error: 'Storage not configured' })
+  const code = await getOrCreateReferralCode(email)
+  if (!code) return res.status(500).json({ error: 'Could not get referral code' })
+  const base = APP_ORIGIN || `https://${DOMAIN}`
+  const url = `${base}?ref=${encodeURIComponent(code)}`
+  res.json({ url, code })
+})
+
+// POST /api/defaults — save defaults for email (body: { email, defaults: { mode, text?, template, scope }, ref? })
 app.post('/api/defaults', async (req, res) => {
   const email = (req.body?.email || '').toString().trim().toLowerCase()
+  const ref = (req.body?.ref || '').toString().trim()
   const def = req.body?.defaults
   if (!email) return res.status(400).json({ error: 'Email required' })
   if (!def || typeof def.mode !== 'string' || typeof def.template !== 'string' || typeof def.scope !== 'string') {
     return res.status(400).json({ error: 'Invalid defaults' })
   }
+  if (isSupabaseConfigured() && ref) attributeReferral(ref, email).catch((err) => console.error('[referral] attributeReferral:', err.message))
   const mode = def.mode === 'logo' ? 'logo' : 'text'
   const template = TEMPLATES_LIST.includes(def.template) ? def.template : 'diagonal-center'
   const scope = SCOPES_LIST.includes(def.scope) ? def.scope : 'all-pages'
@@ -181,13 +196,15 @@ app.post('/api/defaults', async (req, res) => {
   res.json({ ok: true })
 })
 
-// POST /api/defaults/logo — upload default logo for email (multipart: email, logo)
+// POST /api/defaults/logo — upload default logo for email (multipart: email, logo, ref?)
 app.post('/api/defaults/logo', upload.single('logo'), async (req, res) => {
   const email = (req.body?.email || '').toString().trim().toLowerCase()
+  const ref = (req.body?.ref || '').toString().trim()
   const logoFile = req.file
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Valid email required' })
   if (!logoFile || !logoFile.buffer) return res.status(400).json({ error: 'Logo file required' })
   if (!isSupabaseConfigured()) return res.status(503).json({ error: 'Storage not configured' })
+  if (ref) attributeReferral(ref, email).catch((err) => console.error('[referral] attributeReferral:', err.message))
   try {
     const storagePath = await saveDefaultLogo(email, logoFile.buffer, logoFile.mimetype)
     if (!storagePath) return res.status(500).json({ error: 'Failed to save logo' })
@@ -412,7 +429,11 @@ app.post('/api/watermark', upload.fields([
     }
 
     const emailForLimit = (req.body.email || '').toString().trim().toLowerCase()
+    const ref = (req.body.ref || '').toString().trim()
     const hasEmailForLimit = emailForLimit && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailForLimit)
+    if (hasEmailForLimit && ref && isSupabaseConfigured()) {
+      attributeReferral(ref, emailForLimit).catch((err) => console.error('[referral] attributeReferral:', err.message))
+    }
     if (hasEmailForLimit && isSupabaseConfigured()) {
       const limitCheck = await checkMonthlyLimit(emailForLimit, files.length)
       if (!limitCheck.allowed) {

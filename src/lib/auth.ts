@@ -45,3 +45,23 @@ export function clearMagicFromUrl(): void {
   const newUrl = url.pathname + url.search || '/'
   window.history.replaceState({}, '', newUrl)
 }
+
+/** Referral: pending ref code from ?ref= (sessionStorage so it doesn’t persist across tabs). */
+const REF_STORAGE_KEY = 'watermarkfile_pending_ref'
+
+export function getPendingRef(): string | null {
+  try {
+    const r = sessionStorage.getItem(REF_STORAGE_KEY)
+    return r?.trim() || null
+  } catch {
+    return null
+  }
+}
+
+export function setPendingRef(code: string): void {
+  try {
+    sessionStorage.setItem(REF_STORAGE_KEY, code.trim())
+  } catch {
+    // ignore
+  }
+}
