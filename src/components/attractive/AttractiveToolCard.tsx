@@ -133,7 +133,7 @@ interface AttractiveToolCardProps {
   userEmail?: string | null
 }
 
-export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefaults, onDefaultsApplied, onLoadDefaultsClick, onRequestSaveDefaults, userEmail }: AttractiveToolCardProps) {
+export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefaults, onLoadDefaultsClick, onRequestSaveDefaults, userEmail }: AttractiveToolCardProps) {
   const [files, setFiles] = useState<File[]>([])
   const [mode, setMode] = useState<WatermarkMode>('text')
   const [text, setText] = useState('')
