@@ -91,14 +91,9 @@ app.get('/api/defaults', async (req, res) => {
   if (!email) email = getEmailFromCookie(req) || ''
   if (!email) return res.status(400).json({ error: 'Email required' })
 
-  // Only return defaults for "active" users (have used the app / exist in user_stats)
-  if (isSupabaseConfigured()) {
-    const active = await hasUserInStats(email)
-    if (!active) return res.status(404).json({ error: 'User not active' })
-  }
-
   const fromDb = isSupabaseConfigured() ? await getUserDefaults(email) : null
   if (fromDb) {
+    if (isSupabaseConfigured()) upsertUserStats(email, 0).catch((err) => console.error('[supabase] upsertUserStats (get-defaults):', err.message))
     const payload = { mode: fromDb.mode, text: fromDb.text, template: fromDb.template, scope: fromDb.scope, email }
     if (fromDb.logo_storage_path) {
       payload.logo_url = `/api/defaults/logo?email=${encodeURIComponent(email)}`
@@ -106,7 +101,11 @@ app.get('/api/defaults', async (req, res) => {
     return res.json(payload)
   }
   const saved = defaultsByEmail.get(email)
-  if (!saved) return res.status(404).json({ error: 'No defaults found for this email' })
+  if (!saved) {
+    const active = isSupabaseConfigured() ? await hasUserInStats(email) : false
+    if (!active) return res.status(404).json({ error: 'User not active' })
+    return res.status(404).json({ error: 'No defaults found for this email' })
+  }
   res.json({ mode: saved.mode, text: saved.text, template: saved.template, scope: saved.scope, email })
 })
 
@@ -141,7 +140,10 @@ app.post('/api/defaults', async (req, res) => {
   const scope = SCOPES_LIST.includes(def.scope) ? def.scope : 'all-pages'
   const payload = { mode, text: def.text ?? '', template, scope }
   defaultsByEmail.set(email, { ...payload, updatedAt: Date.now() })
-  if (isSupabaseConfigured()) await upsertUserDefaults(email, payload)
+  if (isSupabaseConfigured()) {
+    await upsertUserDefaults(email, payload)
+    await upsertUserStats(email, 0).catch((err) => console.error('[supabase] upsertUserStats (defaults):', err.message))
+  }
   res.json({ ok: true })
 })
 
@@ -160,6 +162,7 @@ app.post('/api/defaults/logo', upload.single('logo'), async (req, res) => {
       ? { mode: current.mode, text: current.text, template: current.template, scope: current.scope, logo_storage_path: storagePath }
       : { mode: 'logo', text: '', template: 'diagonal-center', scope: 'all-pages', logo_storage_path: storagePath }
     await upsertUserDefaults(email, payload)
+    await upsertUserStats(email, 0).catch((err) => console.error('[supabase] upsertUserStats (defaults/logo):', err.message))
     defaultsByEmail.set(email, { ...payload, updatedAt: Date.now() })
     res.json({ ok: true })
   } catch (err) {

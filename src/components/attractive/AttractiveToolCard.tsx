@@ -160,7 +160,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     setSaveAsDefaultStep2(false)
     if (loadedDefaults.mode === 'logo' && loadedDefaults.logo_url) {
       const logoUrl = loadedDefaults.logo_url.startsWith('/') ? apiUrl(loadedDefaults.logo_url) : loadedDefaults.logo_url
-      fetch(logoUrl)
+      fetch(logoUrl, { credentials: 'include' })
         .then((r) => r.blob())
         .then((blob) => new File([blob], 'default-logo.png', { type: blob.type || 'image/png' }))
         .then((file) => setLogoFile(file))
