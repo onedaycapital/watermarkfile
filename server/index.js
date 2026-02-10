@@ -311,8 +311,12 @@ app.post('/api/watermark', upload.fields([
       const successCount = results.filter((r) => r.status === 'success').length
       const errorCount = results.filter((r) => r.status === 'error').length
       recordUploadBatch(email, { successCount, errorCount, failReasons })
-      if (isSupabaseConfigured() && successCount > 0) {
-        upsertUserStats(email, successCount).catch((err) => console.error('[supabase] upsertUserStats:', err.message))
+      if (successCount > 0) {
+        if (isSupabaseConfigured()) {
+          upsertUserStats(email, successCount).catch((err) => console.error('[supabase] upsertUserStats:', err.message))
+        } else {
+          console.log('[supabase] Skipped: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on Railway to persist stats and storage.')
+        }
       }
     }
 
