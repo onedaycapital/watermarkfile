@@ -96,12 +96,15 @@ function App() {
       .then((res) => (res?.ok ? res.json() : null))
       .then((data) => {
         if (cancelled || !data?.mode) return
+        const mode = data.mode === 'logo' ? 'logo' : 'text'
+        const template = ['diagonal-center', 'repeating-pattern', 'footer-tag'].includes(data.template) ? data.template : 'diagonal-center'
+        const scope = data.scope === 'first-page-only' ? 'first-page-only' : 'all-pages'
         const norm = (data.email || '').trim().toLowerCase()
         setLoadedDefaults({
-          mode: data.mode,
-          text: data.text,
-          template: data.template,
-          scope: data.scope,
+          mode,
+          text: typeof data.text === 'string' ? data.text : '',
+          template,
+          scope,
           logo_url: data.logo_url,
           email: norm,
         })
@@ -120,7 +123,7 @@ function App() {
         if (res.ok) return res.json()
         if (storedEmail) {
           const local = getStoredDefaults()
-          if (local) setLoadedDefaults({ ...local, logo_url: undefined })
+          if (local) setLoadedDefaults({ ...local, logo_url: undefined, email: storedEmail.trim().toLowerCase() })
         }
         return null
       })
@@ -135,13 +138,16 @@ function App() {
             /* ignore */
           }
         }
-        if (data.mode && data.template && data.scope) {
+        const mode = data.mode === 'logo' ? 'logo' : 'text'
+        const template = ['diagonal-center', 'repeating-pattern', 'footer-tag'].includes(data.template) ? data.template : 'diagonal-center'
+        const scope = data.scope === 'first-page-only' ? 'first-page-only' : 'all-pages'
+        if (data.mode != null && data.template != null && data.scope != null) {
           const emailNorm = data.email?.trim().toLowerCase()
           const next = {
-            mode: data.mode,
-            text: data.text ?? '',
-            template: data.template,
-            scope: data.scope,
+            mode,
+            text: typeof data.text === 'string' ? data.text : '',
+            template,
+            scope,
             logo_url: data.logo_url,
             email: emailNorm,
           }
@@ -152,7 +158,7 @@ function App() {
       .catch(() => {
         if (storedEmail) {
           const local = getStoredDefaults()
-          if (local) setLoadedDefaults({ ...local, logo_url: undefined })
+          if (local) setLoadedDefaults({ ...local, logo_url: undefined, email: storedEmail.trim().toLowerCase() })
         }
       })
   }, [])
@@ -529,11 +535,14 @@ function App() {
       } catch {
         /* ignore */
       }
+      const mode = data.mode === 'logo' ? 'logo' : 'text'
+      const template = ['diagonal-center', 'repeating-pattern', 'footer-tag'].includes(data.template) ? data.template : 'diagonal-center'
+      const scope = data.scope === 'first-page-only' ? 'first-page-only' : 'all-pages'
       const next = {
-        mode: data.mode,
-        text: data.text ?? '',
-        template: data.template,
-        scope: data.scope,
+        mode,
+        text: typeof data.text === 'string' ? data.text : '',
+        template,
+        scope,
         logo_url: data.logo_url,
         email: normalized,
       }

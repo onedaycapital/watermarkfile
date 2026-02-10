@@ -1,12 +1,26 @@
 import { useState, useRef, useEffect } from 'react'
 import type { WatermarkOptions, WatermarkMode, Template, Scope } from '../../types'
-import { getStoredDefaults, type StoredDefaults } from '../../lib/defaults'
+import { type StoredDefaults } from '../../lib/defaults'
 import { apiUrl } from '../../lib/api'
 import { track, AnalyticsEvents, getFileExtension } from '../../lib/analytics'
 import { IconUpload, IconChevronRight, IconChevronDown, IconDownload, IconText, IconImage } from './Icons'
 
 const ACCEPT = '.pdf,.jpg,.jpeg,.png'
 const MAX_TEXT_LEN = 60
+
+const VALID_MODES: WatermarkMode[] = ['text', 'logo']
+const VALID_TEMPLATES: Template[] = ['diagonal-center', 'repeating-pattern', 'footer-tag']
+const VALID_SCOPES: Scope[] = ['all-pages', 'first-page-only']
+
+function clampMode(m: unknown): WatermarkMode {
+  return VALID_MODES.includes(m as WatermarkMode) ? (m as WatermarkMode) : 'text'
+}
+function clampTemplate(t: unknown): Template {
+  return VALID_TEMPLATES.includes(t as Template) ? (t as Template) : 'diagonal-center'
+}
+function clampScope(s: unknown): Scope {
+  return VALID_SCOPES.includes(s as Scope) ? (s as Scope) : 'all-pages'
+}
 
 const TEMPLATES: { value: Template; label: string }[] = [
   { value: 'diagonal-center', label: 'Diagonal' },
@@ -121,11 +135,11 @@ interface AttractiveToolCardProps {
 
 export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefaults, onDefaultsApplied, onLoadDefaultsClick, onRequestSaveDefaults, userEmail }: AttractiveToolCardProps) {
   const [files, setFiles] = useState<File[]>([])
-  const [mode, setMode] = useState<WatermarkMode>(() => getStoredDefaults()?.mode ?? 'text')
-  const [text, setText] = useState(() => getStoredDefaults()?.text ?? '')
+  const [mode, setMode] = useState<WatermarkMode>('text')
+  const [text, setText] = useState('')
   const [logoFile, setLogoFile] = useState<File | null>(null)
-  const [template, setTemplate] = useState<Template>(() => getStoredDefaults()?.template ?? 'diagonal-center')
-  const [scope, setScope] = useState<Scope>(() => getStoredDefaults()?.scope ?? 'all-pages')
+  const [template, setTemplate] = useState<Template>('diagonal-center')
+  const [scope, setScope] = useState<Scope>('all-pages')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
   const [disabledHint, setDisabledHint] = useState<string | null>(null)
@@ -150,46 +164,42 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     return () => URL.revokeObjectURL(url)
   }, [logoFile])
 
-  // Apply loaded defaults. When step 1 default is logo: fetch logo from API and display it. One path only: build URL from email, fetch, set logo file.
+  // Single source of truth: when loadedDefaults is set, apply step 1 and step 2 values exactly. Checkboxes = true only when we have applied these defaults.
   useEffect(() => {
-    if (!loadedDefaults) return
+    if (!loadedDefaults || typeof loadedDefaults.mode !== 'string' || typeof loadedDefaults.template !== 'string' || typeof loadedDefaults.scope !== 'string') return
     let cancelled = false
-    setMode(loadedDefaults.mode)
-    setText(loadedDefaults.text ?? '')
-    setTemplate(loadedDefaults.template)
-    setScope(loadedDefaults.scope)
+    const modeVal = clampMode(loadedDefaults.mode)
+    const templateVal = clampTemplate(loadedDefaults.template)
+    const scopeVal = clampScope(loadedDefaults.scope)
+    const textVal = typeof loadedDefaults.text === 'string' ? loadedDefaults.text : ''
+
+    setMode(modeVal)
+    setText(textVal)
+    setTemplate(templateVal)
+    setScope(scopeVal)
     setSaveAsDefaultStep1(true)
     setSaveAsDefaultStep2(true)
-    const clear = onDefaultsApplied
+
     const email = (loadedDefaults.email || userEmail)?.trim().toLowerCase()
-    if (loadedDefaults.mode === 'logo' && email) {
+    const clear = onDefaultsApplied
+
+    if (modeVal === 'logo' && email) {
+      setLogoFile(null)
       const logoUrl = apiUrl(`/api/defaults/logo?email=${encodeURIComponent(email)}`)
       fetch(logoUrl, { credentials: 'include' })
-        .then((r) => {
-          if (!r.ok) throw new Error(`Logo ${r.status}`)
-          return r.blob()
-        })
-        .then((blob) => {
-          const type = blob.type || 'image/png'
-          return new File([blob], 'default-logo.png', { type })
-        })
-        .then((file) => {
-          if (!cancelled) setLogoFile(file)
-        })
-        .catch(() => {
-          if (!cancelled) setLogoFile(null)
-        })
+        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(`${r.status}`))))
+        .then((blob) => new File([blob], 'default-logo.png', { type: blob.type || 'image/png' }))
+        .then((file) => { if (!cancelled) setLogoFile(file) })
+        .catch(() => { if (!cancelled) setLogoFile(null) })
         .finally(() => {
-          if (!cancelled) clear?.()
+          if (!cancelled) requestAnimationFrame(() => clear?.())
         })
-      return () => { cancelled = true }
+    } else {
+      setLogoFile(null)
+      requestAnimationFrame(() => clear?.())
     }
-    setLogoFile(null)
-    const t = setTimeout(() => clear?.(), 50)
-    return () => {
-      cancelled = true
-      clearTimeout(t)
-    }
+
+    return () => { cancelled = true }
   }, [loadedDefaults, onDefaultsApplied, userEmail])
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
