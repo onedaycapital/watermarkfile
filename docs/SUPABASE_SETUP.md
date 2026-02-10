@@ -116,3 +116,16 @@ The watermarked file is still served from the in-memory store for immediate down
 - **first_used_at:** Set once when a given email first appears in `user_stats` (defaults save, magic link, or watermark). Use this for “first month free” logic: e.g. after 30 days from `first_used_at`, direct the user to a payment/subscribe page (handled in your app or a future admin dashboard).
 - **max_uploads_per_month:** Optional. `NULL` = unlimited (default). When set to an integer (e.g. 100), the backend checks **usage_count_this_month** before processing; if the user would exceed the limit, the API returns **402** with a message asking them to subscribe or wait until next month. Usage resets by calendar month (UTC).
 - **Existing databases:** Run the `ALTER TABLE` and `UPDATE` statements from the bottom of `docs/supabase-schema.sql` once to add the new columns and backfill `first_used_at` from `created_at` where needed.
+
+---
+
+## 8. Troubleshooting: "Failed to save logo"
+
+When a user checks **Save as default** with a logo, the app uploads the logo to Supabase Storage and inserts a row in `user_logo_assets`. If you see **Failed to save logo** (or a more specific message from the server):
+
+1. **Storage bucket missing** – Create the bucket named exactly `watermarked-files` (Storage → New bucket). The error may say "Storage bucket missing or not configured".
+2. **Schema not fully applied** – Default logos require the `user_logo_assets` and `user_defaults` tables. Run the full `docs/supabase-schema.sql` in the SQL Editor (not just the snippet in this doc).
+3. **Environment variables** – On the host where the backend runs, set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. If either is missing, the app returns "Storage not configured" (503).
+4. **Server logs** – Check backend logs for `[supabase] saveLogoAsset upload:` or `saveLogoAsset insert:` to see the exact Supabase error.
+
+After the change in this repo, the API returns more specific error messages so you can see whether the failure was storage or database.

@@ -184,7 +184,7 @@ export async function saveFileToStorage(email, fileName, buffer, contentType) {
  * @returns {Promise<string | null>} storage path or null
  */
 export async function saveLogoAsset(email, buffer, contentType, opts = {}) {
-  if (!client) return null
+  if (!client) throw new Error('Storage not configured')
   const setAsDefault = !!opts.setAsDefault
   try {
     const prefix = sanitizeEmailForPath(email)
@@ -197,7 +197,8 @@ export async function saveLogoAsset(email, buffer, contentType, opts = {}) {
     })
     if (uploadError) {
       console.error('[supabase] saveLogoAsset upload:', uploadError.message)
-      return null
+      const msg = uploadError.message || 'Storage upload failed'
+      throw new Error(msg.includes('Bucket') ? 'Storage bucket missing or not configured. Check Supabase Storage.' : `Logo upload failed: ${msg}`)
     }
     const { error: insertError } = await client.from('user_logo_assets').insert({
       email: email.toLowerCase().trim(),
@@ -206,15 +207,15 @@ export async function saveLogoAsset(email, buffer, contentType, opts = {}) {
     })
     if (insertError) {
       console.error('[supabase] saveLogoAsset insert:', insertError.message)
-      return null
+      throw new Error(insertError.message?.includes('relation') ? 'Logo database table missing. Run docs/supabase-schema.sql in Supabase.' : `Could not register logo: ${insertError.message || 'database error'}`)
     }
     if (setAsDefault) {
       await setDefaultLogo(email, storagePath)
     }
     return storagePath
   } catch (err) {
-    console.error('[supabase] saveLogoAsset:', err.message)
-    return null
+    if (err instanceof Error) console.error('[supabase] saveLogoAsset:', err.message)
+    throw err
   }
 }
 
