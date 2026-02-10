@@ -146,6 +146,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
   const [emailMeFiles, setEmailMeFiles] = useState(false)
   const [saveAsDefaultStep1, setSaveAsDefaultStep1] = useState(false)
   const [saveAsDefaultStep2, setSaveAsDefaultStep2] = useState(false)
+  const lastAppliedDefaultsRef = useRef<StoredDefaults | null>(null)
 
   // Logo preview: create object URL when logo file is set, revoke on change/unmount
   useEffect(() => {
@@ -164,9 +165,15 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     return () => URL.revokeObjectURL(url)
   }, [logoFile])
 
-  // Single source of truth: when loadedDefaults is set, apply step 1 and step 2 values exactly. Checkboxes = true only when we have applied these defaults.
+  // Single source of truth: when loadedDefaults is set, apply step 1 and step 2 values exactly. Do not clear loadedDefaults so it persists when user returns to form (e.g. Watermark more files).
   useEffect(() => {
-    if (!loadedDefaults || typeof loadedDefaults.mode !== 'string' || typeof loadedDefaults.template !== 'string' || typeof loadedDefaults.scope !== 'string') return
+    if (!loadedDefaults || typeof loadedDefaults.mode !== 'string' || typeof loadedDefaults.template !== 'string' || typeof loadedDefaults.scope !== 'string') {
+      lastAppliedDefaultsRef.current = null
+      return
+    }
+    if (lastAppliedDefaultsRef.current === loadedDefaults) return
+    lastAppliedDefaultsRef.current = loadedDefaults
+
     let cancelled = false
     const modeVal = clampMode(loadedDefaults.mode)
     const templateVal = clampTemplate(loadedDefaults.template)
@@ -181,7 +188,6 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     setSaveAsDefaultStep2(true)
 
     const email = (loadedDefaults.email || userEmail)?.trim().toLowerCase()
-    const clear = onDefaultsApplied
 
     if (modeVal === 'logo' && email) {
       setLogoFile(null)
@@ -191,16 +197,12 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
         .then((blob) => new File([blob], 'default-logo.png', { type: blob.type || 'image/png' }))
         .then((file) => { if (!cancelled) setLogoFile(file) })
         .catch(() => { if (!cancelled) setLogoFile(null) })
-        .finally(() => {
-          if (!cancelled) requestAnimationFrame(() => clear?.())
-        })
     } else {
       setLogoFile(null)
-      requestAnimationFrame(() => clear?.())
     }
 
     return () => { cancelled = true }
-  }, [loadedDefaults, onDefaultsApplied, userEmail])
+  }, [loadedDefaults, userEmail])
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const items = Array.from(e.target.files || [])
