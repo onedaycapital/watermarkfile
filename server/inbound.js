@@ -35,6 +35,7 @@ export async function processInboundEmail(opts) {
   }
 
   const defaults = await getUserDefaults(senderEmail)
+  console.log('[inbound] sender=', senderEmail, 'defaults=', defaults ? 'found' : 'null')
   if (!defaults) {
     return {
       to: senderEmail,

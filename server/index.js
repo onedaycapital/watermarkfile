@@ -284,6 +284,7 @@ app.post('/api/webhooks/inbound-email', async (req, res) => {
   res.status(200).send()
   const body = req.body
   if (body?.type !== 'email.received') return
+  console.log('[inbound] Supabase configured:', isSupabaseConfigured(), 'raw from:', body?.data?.from)
   try {
     const reply = await processInboundEmail({
       body,
