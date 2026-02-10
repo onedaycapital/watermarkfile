@@ -1,9 +1,77 @@
+import { useState, useEffect, useMemo } from 'react'
 import { AttractiveHeader } from '../components/attractive/AttractiveHeader'
 import { AttractiveHero } from '../components/attractive/AttractiveHero'
 import { AttractiveToolCard } from '../components/attractive/AttractiveToolCard'
 import { IconCheck } from '../components/attractive/Icons'
 
 const USED_BY = ['Bankers', 'Brokers', 'Lenders', 'Lawyers', 'Influencers', 'Professional Photographers']
+
+// Base date for live counters: on this day we show BASE_DOCS and BASE_CUSTOMERS; each day after +25 docs, +2 customers
+const STATS_BASE_DATE = new Date('2025-02-10T00:00:00Z')
+const BASE_DOCS = 56040
+const BASE_CUSTOMERS = 1983
+const DOCS_PER_DAY = 25
+const CUSTOMERS_PER_DAY = 2
+
+function getLiveStats() {
+  const now = new Date()
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const baseDay = new Date(Date.UTC(STATS_BASE_DATE.getUTCFullYear(), STATS_BASE_DATE.getUTCMonth(), STATS_BASE_DATE.getUTCDate()))
+  const daysSince = Math.max(0, Math.floor((today.getTime() - baseDay.getTime()) / 86400000))
+  return {
+    documents: BASE_DOCS + daysSince * DOCS_PER_DAY,
+    customers: BASE_CUSTOMERS + daysSince * CUSTOMERS_PER_DAY,
+  }
+}
+
+function useAnimatedValue(target: number, durationMs: number) {
+  const [display, setDisplay] = useState('0')
+  useEffect(() => {
+    const start = Date.now()
+    const tick = () => {
+      const elapsed = Date.now() - start
+      const t = Math.min(1, elapsed / durationMs)
+      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+      const current = Math.round(target * eased)
+      setDisplay(current.toLocaleString())
+      if (t < 1) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }, [target])
+  return display
+}
+
+function LiveStatsSection() {
+  const { documents: targetDocs, customers: targetCustomers } = useMemo(getLiveStats, [])
+  const durationMs = 2200
+  const displayDocs = useAnimatedValue(targetDocs, durationMs)
+  const displayCustomers = useAnimatedValue(targetCustomers, durationMs)
+
+  const stats = [
+    { value: displayDocs, label: 'Documents Watermarked' },
+    { value: displayCustomers, label: 'Customers Serviced' },
+    { value: '8', label: 'Industries' },
+    { value: '0', label: 'Files Saved on Server' },
+    { value: '99%', label: 'Uptime' },
+  ]
+
+  return (
+    <section className="w-full max-w-4xl mx-auto px-4 py-8" aria-label="Stats">
+      <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm overflow-hidden">
+        <div className="flex flex-wrap justify-center items-stretch divide-x divide-slate-500/40">
+          {stats.map((stat, i) => (
+            <div key={stat.label} className="flex-1 min-w-[140px] px-4 py-6 text-center">
+              <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-white tabular-nums">
+                {stat.value}
+              </div>
+              <div className="text-xs sm:text-sm text-white/75 mt-1 font-medium">{stat.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
 import { AttractiveProgressPipeline } from '../components/attractive/AttractiveProgressPipeline'
 import { AttractiveResultsPanel } from '../components/attractive/AttractiveResultsPanel'
 import { Footer } from '../components/Footer'
@@ -97,6 +165,7 @@ export function AttractiveView({
                   </span>
                 ))}
               </div>
+              <LiveStatsSection />
               <div className="flex flex-col items-center gap-1.5 mt-4 text-xs text-white/70 text-center max-w-xl mx-auto">
                 <p className="inline-flex items-center gap-1.5">
                   <span aria-hidden>🔒</span>
