@@ -568,6 +568,9 @@ function drawTextWatermark(page, font, text, { width, height, template }) {
   })
 }
 
+// Logo watermark opacity: light enough for OCR and watermark norms (bank statements, etc.)
+const LOGO_WATERMARK_OPACITY = 0.2
+
 function drawLogoWatermark(page, embeddedImage, { width, height, template }) {
   const maxDim = Math.min(width, height) * 0.25
   const imgW = embeddedImage.width
@@ -575,7 +578,7 @@ function drawLogoWatermark(page, embeddedImage, { width, height, template }) {
   const scale = Math.min(maxDim / imgW, maxDim / imgH, 1)
   const w = imgW * scale
   const h = imgH * scale
-  const opacity = 0.3
+  const opacity = LOGO_WATERMARK_OPACITY
 
   if (template === 'footer-tag') {
     const x = width / 2 - w / 2
@@ -615,7 +618,8 @@ async function watermarkImage(inputBuffer, { mode, text, logoFile, template }) {
     const scale = Math.min(maxDim / (logoMeta.width || 1), maxDim / (logoMeta.height || 1), 1)
     const w = Math.round((logoMeta.width || 1) * scale)
     const h = Math.round((logoMeta.height || 1) * scale)
-    const logoBuf = await logo.resize(w, h).png().toBuffer()
+    // Semi-transparent logo for OCR-friendly watermarks (aligns with LOGO_WATERMARK_OPACITY for PDFs)
+    const logoBuf = await logo.resize(w, h).ensureAlpha(LOGO_WATERMARK_OPACITY).png().toBuffer()
 
     if (template === 'footer-tag') {
       const left = Math.round((width - w) / 2)
