@@ -149,7 +149,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     return () => URL.revokeObjectURL(url)
   }, [logoFile])
 
-  // Apply loaded defaults (step 1: logo or text; step 2: template/scope). Show checkmarks to indicate defaults are loaded. Logo: clear onDefaultsApplied only after fetch completes so logo has time to load.
+  // Apply loaded defaults (step 1: logo or text; step 2: template/scope). Show checkmarks to indicate defaults are loaded. Logo: fetch with retry, check res.ok, clear onDefaultsApplied only after fetch completes.
   useEffect(() => {
     if (!loadedDefaults) return
     let cancelled = false
@@ -162,16 +162,25 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
     const clear = onDefaultsApplied
     if (loadedDefaults.mode === 'logo' && loadedDefaults.logo_url) {
       const logoUrl = loadedDefaults.logo_url.startsWith('/') ? apiUrl(loadedDefaults.logo_url) : loadedDefaults.logo_url
-      fetch(logoUrl, { credentials: 'include' })
-        .then((r) => r.blob())
-        .then((blob) => new File([blob], 'default-logo.png', { type: blob.type || 'image/png' }))
-        .then((file) => {
-          if (!cancelled) setLogoFile(file)
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (!cancelled) clear?.()
-        })
+      const tryFetch = (attempt: number): Promise<void> =>
+        fetch(logoUrl, { credentials: 'include' })
+          .then((r) => {
+            if (!r.ok) throw new Error(`Logo ${r.status}`)
+            return r.blob().then((blob) => {
+              const type = blob.type || (r.headers.get('Content-Type') ?? '').split(';')[0].trim() || 'image/png'
+              return new File([blob], 'default-logo.png', { type })
+            })
+          })
+          .then((file) => {
+            if (!cancelled) setLogoFile(file)
+          })
+          .catch((err) => {
+            if (attempt > 0 || cancelled) return
+            return new Promise<void>((r) => setTimeout(r, 400)).then(() => tryFetch(1))
+          })
+      tryFetch(0).finally(() => {
+        if (!cancelled) clear?.()
+      })
       return () => {
         cancelled = true
       }
