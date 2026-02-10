@@ -96,7 +96,7 @@ function App() {
       .then((res) => (res?.ok ? res.json() : null))
       .then((data) => {
         if (cancelled || !data?.mode) return
-        const norm = (data.email || email).trim().toLowerCase()
+        const norm = (data.email || '').trim().toLowerCase()
         setLoadedDefaults({
           mode: data.mode,
           text: data.text,
