@@ -14,6 +14,7 @@ interface AttractiveResultsPanelProps {
   onSaveDefaults: (checked: boolean) => void
   onStartOver: () => void
   initialEmail?: string
+  resultsEmailSent?: boolean
   className?: string
 }
 
@@ -28,6 +29,7 @@ export function AttractiveResultsPanel({
   onSaveDefaults,
   onStartOver,
   initialEmail,
+  resultsEmailSent = false,
   className = '',
 }: AttractiveResultsPanelProps) {
   const pendingDelivery = files
@@ -48,7 +50,7 @@ export function AttractiveResultsPanel({
         </div>
       </div>
       <div className="p-6 md:p-8">
-        {files.length > 0 && (
+        {files.length > 0 && !isVerified && (
           <ConfirmEmailForDownload
             pendingDelivery={pendingDelivery}
             initialEmail={initialEmail}
@@ -57,22 +59,17 @@ export function AttractiveResultsPanel({
             className="mb-5"
           />
         )}
+        {resultsEmailSent && (
+          <p className="mb-4 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+            Files sent to your email. You can also download below.
+          </p>
+        )}
         <div className="flex flex-wrap gap-4 items-center mb-5">
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={onEmailToggle}
-              aria-pressed={emailDeliveryOn}
-              className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 ${emailDeliveryOn ? 'bg-violet-600' : 'bg-slate-200'}`}
-            >
-              <span className={`inline-block h-6 w-6 rounded-full bg-white shadow-sm transition-transform duration-200 ${emailDeliveryOn ? 'translate-x-5' : 'translate-x-0.5'}`} />
-            </button>
-            <span className="text-sm text-slate-700">Email me files</span>
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-2 cursor-pointer" title="Overwrites your stored default with this run’s options (steps 1–2).">
             <input type="checkbox" onChange={(e) => onSaveDefaults(e.target.checked)} className="rounded border-slate-300 text-violet-600 focus:ring-violet-500" />
             <span className="text-sm text-slate-600">Save as default</span>
           </label>
+          <span className="text-xs text-slate-400">Overwrites stored default with this run’s setup.</span>
         </div>
         <ul className="space-y-2">
           {files.map((f) => (

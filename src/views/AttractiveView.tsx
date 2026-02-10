@@ -18,7 +18,7 @@ export interface AttractiveViewProps {
   isVerified?: boolean
   emailSaved: boolean
   emailDeliveryToggled: boolean
-  onWatermarkRequest: (files: File[], options: WatermarkOptions) => void
+  onWatermarkRequest: (files: File[], options: WatermarkOptions, extras?: { emailMeFiles: boolean }) => void
   onEmailToggleClick: () => void
   onMagicLinkEmailSent?: (email: string) => void
   onConfirmBlockEmailChange?: (email: string) => void
@@ -28,6 +28,8 @@ export interface AttractiveViewProps {
   loadedDefaults: StoredDefaults | null
   onDefaultsApplied: () => void
   userEmail?: string | null
+  emailMeFilesChosen?: boolean
+  resultsEmailSent?: boolean
 }
 
 export function AttractiveView({
@@ -47,6 +49,8 @@ export function AttractiveView({
   loadedDefaults,
   onDefaultsApplied,
   userEmail,
+  emailMeFilesChosen = false,
+  resultsEmailSent = false,
 }: AttractiveViewProps) {
   const showResults = results.length > 0 && pipelineState === 'ready'
   const showProgress = pipelineState === 'uploading' || pipelineState === 'processing' || pipelineState === 'ready'
@@ -117,6 +121,7 @@ export function AttractiveView({
                 onSaveDefaults={onSaveDefaults}
                 onStartOver={onStartOver}
                 initialEmail={userEmail ?? undefined}
+                resultsEmailSent={resultsEmailSent}
               />
             </div>
           )}

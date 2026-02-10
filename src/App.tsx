@@ -45,6 +45,10 @@ function App() {
   const [saveDefaultsLoading, setSaveDefaultsLoading] = useState(false)
   /** Email typed in the "Confirm email to download" block – use for toggle/save so we don't ask again. */
   const [emailFromConfirmBlock, setEmailFromConfirmBlock] = useState('')
+  /** For the current results: did user choose "Email me files" in step 4? (so we send email and don't auto-download) */
+  const [lastEmailMeFilesChoice, setLastEmailMeFilesChoice] = useState(false)
+  /** After sending results by email, show success message in results panel */
+  const [resultsEmailSent, setResultsEmailSent] = useState(false)
 
   // Handle magic-link callback: verify token, set auth, trigger downloads, show results
   useEffect(() => {
@@ -117,7 +121,10 @@ function App() {
   }, [])
 
   /** Sequential uploads so each request stays under Vercel's ~4.5 MB serverless body limit. */
-  const onWatermarkRequest = async (files: File[], options: WatermarkOptions) => {
+  const onWatermarkRequest = async (files: File[], options: WatermarkOptions, extras?: { emailMeFiles?: boolean }) => {
+    const emailMeFiles = !!extras?.emailMeFiles
+    setLastEmailMeFilesChoice(emailMeFiles)
+    setResultsEmailSent(false)
     const logoSize = options.mode === 'logo' && options.logoFile ? options.logoFile.size : 0
     const sizeLimitMsg = `File too large (max ${(MAX_REQUEST_BODY_BYTES / 1024 / 1024).toFixed(1)} MB per file).`
 
@@ -237,12 +244,32 @@ function App() {
       addUserProperty('total_uploads', 1)
       identifyUser({ last_upload_file_types: resultFileTypes })
 
-      if (isVerified) {
-        mappedResults.forEach((f: ProcessedFile, i: number) => {
-          if (f.status === 'success' && f.downloadUrl) {
-            setTimeout(() => triggerDownload(f.downloadUrl!, f.name), i * 400)
+      if (isVerified && userEmail) {
+        if (emailMeFiles) {
+          const successItems = mappedResults.filter((f): f is ProcessedFile & { downloadUrl: string } => f.status === 'success' && !!f.downloadUrl)
+          if (successItems.length > 0) {
+            const items = successItems.map((f) => {
+              const token = f.downloadUrl.replace(/^.*\/api\/download\//, '').replace(/\?.*$/, '')
+              return { token, name: f.name }
+            })
+            try {
+              const sendRes = await fetch(apiUrl('/api/send-results-email'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: userEmail, items }),
+              })
+              if (sendRes.ok) setResultsEmailSent(true)
+            } catch {
+              // leave resultsEmailSent false
+            }
           }
-        })
+        } else {
+          mappedResults.forEach((f: ProcessedFile, i: number) => {
+            if (f.status === 'success' && f.downloadUrl) {
+              setTimeout(() => triggerDownload(f.downloadUrl!, f.name), i * 400)
+            }
+          })
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Processing failed'
@@ -345,6 +372,7 @@ function App() {
   const onStartOver = () => {
     track(AnalyticsEvents.StartOverClicked)
     setResults([])
+    setResultsEmailSent(false)
     setPipelineState('idle')
     setPipelineProgress({
       phase: 'idle',
@@ -457,6 +485,8 @@ function App() {
         loadedDefaults={loadedDefaults}
         onDefaultsApplied={onDefaultsApplied}
         userEmail={userEmail}
+        emailMeFilesChosen={lastEmailMeFilesChoice}
+        resultsEmailSent={resultsEmailSent}
       />
 
       <EmailCaptureModal

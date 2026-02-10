@@ -80,9 +80,14 @@ export function ConfirmEmailForDownload({
           : "Enter your email and we'll send you a magic link. Use it next time to get your files by email."}
       </p>
       {status === 'sent' ? (
-        <p className="mt-3 text-sm font-medium text-violet-700">
-          Check your inbox and click the link we sent. Your downloads will start when you do.
-        </p>
+        <div className="mt-3 space-y-1">
+          <p className="text-sm font-medium text-violet-700">
+            Check your inbox and click the link we sent. Your downloads will start when you do.
+          </p>
+          <p className="text-xs text-slate-500">
+            If you don&apos;t see it in a minute, check your spam or junk folder.
+          </p>
+        </div>
       ) : (
         <form onSubmit={handleSubmit} className="mt-3 flex flex-col sm:flex-row gap-2">
           <input
@@ -96,7 +101,7 @@ export function ConfirmEmailForDownload({
               if (normalized && normalized.includes('@')) onEmailChange?.(normalized)
             }}
             placeholder="you@example.com"
-            className="flex-1 min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+            className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
             disabled={status === 'sending'}
           />
           <button

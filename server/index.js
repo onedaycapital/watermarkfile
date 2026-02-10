@@ -177,6 +177,40 @@ app.post('/api/webhooks/inbound-email', async (req, res) => {
   }
 })
 
+// POST /api/send-results-email — send watermarked files by email (no magic link; for verified users who chose "Email me files")
+app.post('/api/send-results-email', async (req, res) => {
+  try {
+    const email = (req.body?.email || '').toString().trim().toLowerCase()
+    const items = Array.isArray(req.body?.items) ? req.body.items : []
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Valid email required' })
+    }
+    if (items.length === 0) return res.status(400).json({ error: 'No items to send' })
+    const attachments = []
+    for (const it of items) {
+      const token = (it.token || (it.downloadUrl || '').replace(/^.*\/api\/download\//, '').replace(/\?.*$/, '')).trim()
+      if (!token) continue
+      const entry = store.get(token)
+      if (!entry) continue
+      attachments.push({ filename: entry.filename, content: entry.buffer })
+    }
+    if (attachments.length === 0) {
+      return res.status(400).json({ error: 'No valid files to send; they may have expired' })
+    }
+    await sendReplyWithAttachments({
+      to: email,
+      subject: 'Your watermarked files – WatermarkFile',
+      text: `Here are your ${attachments.length} watermarked file(s). — WatermarkFile`,
+      html: `<p>Here are your ${attachments.length} watermarked file(s).</p><p>— WatermarkFile</p>`,
+      attachments,
+    })
+    res.json({ ok: true, sent: attachments.length })
+  } catch (err) {
+    console.error('[send-results-email]', err)
+    res.status(500).json({ error: err.message || 'Failed to send email' })
+  }
+})
+
 // GET /api/download/:token — stream processed file
 app.get('/api/download/:token', (req, res) => {
   const entry = store.get(req.params.token)

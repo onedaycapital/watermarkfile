@@ -109,7 +109,7 @@ function StepTile({
 }
 
 interface AttractiveToolCardProps {
-  onWatermarkRequest: (files: File[], options: WatermarkOptions) => void
+  onWatermarkRequest: (files: File[], options: WatermarkOptions, extras?: { emailMeFiles: boolean }) => void
   disabled?: boolean
   loadedDefaults?: StoredDefaults | null
   onDefaultsApplied?: () => void
@@ -126,6 +126,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
   const [disabledHint, setDisabledHint] = useState<string | null>(null)
+  const [emailMeFiles, setEmailMeFiles] = useState(false)
 
   // Logo preview: create object URL when logo file is set, revoke on change/unmount
   useEffect(() => {
@@ -198,7 +199,7 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
       logoFile: mode === 'logo' ? logoFile || undefined : undefined,
       template,
       scope,
-    })
+    }, { emailMeFiles })
   }
 
   return (
@@ -211,6 +212,9 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
             </h2>
             <p className="text-sm text-slate-600 mt-1 font-medium break-words">
               Follow the steps in order — each leads to the next.
+            </p>
+            <p className="text-xs text-slate-500 mt-1 break-words">
+              Defaults pre-fill steps 1–2. You can change them for this run; your saved default stays until you overwrite it with &quot;Save as default&quot;.
             </p>
           </div>
           {onLoadDefaultsClick && (
@@ -355,8 +359,17 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
             </StepTile>
             <StepConnector isLast={false} />
 
-            <StepTile step={4} title="Download" accent={STEP_ACCENTS[3]}>
-              <div className="flex flex-col justify-center flex-1 gap-2">
+            <StepTile step={4} title="Get files" accent={STEP_ACCENTS[3]}>
+              <div className="flex flex-col justify-center flex-1 gap-3">
+                <ToggleGroup
+                  label="How do you want your files?"
+                  value={emailMeFiles ? 'email' : 'download'}
+                  onChange={(v) => setEmailMeFiles(v === 'email')}
+                  options={[
+                    { value: 'download', label: 'Download now', icon: <IconDownload className="w-4 h-4" /> },
+                    { value: 'email', label: 'Email me files' },
+                  ]}
+                />
                 {(!canSubmit || disabledHint) && (
                   <p className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2" role="alert">
                     {disabledHint || (files.length === 0
