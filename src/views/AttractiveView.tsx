@@ -4,7 +4,7 @@ import { AttractiveHero } from '../components/attractive/AttractiveHero'
 import { AttractiveToolCard } from '../components/attractive/AttractiveToolCard'
 import { IconCheck } from '../components/attractive/Icons'
 
-const USED_BY = ['Bankers', 'Brokers', 'Lenders', 'Lawyers', 'Influencers', 'Professional Photographers']
+const USED_BY = ['Bankers', 'Brokers', 'Lenders', 'Lawyers', 'Influencers', 'Real Estate Agents', 'Students', 'Sales & HR Teams']
 
 // Base date for live counters: on this day we show BASE_DOCS and BASE_CUSTOMERS; each day after +25 docs, +2 customers
 const STATS_BASE_DATE = new Date('2025-02-10T00:00:00Z')
