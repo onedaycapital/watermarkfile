@@ -722,22 +722,22 @@ async function watermarkImage(inputBuffer, { mode, text, logoFile, template }) {
   }
 
   // Text mode: use SVG overlay (xmlns + viewBox so Sharp/librsvg rasterizes correctly on JPEG)
+  // UTF-8 and font stack so "COPYRIGHT: SREE" etc. render as text, not tofu (Arial often missing on Linux)
   const svgAttrs = `xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"`
+  const svgPrefix = '<?xml version="1.0" encoding="UTF-8"?>'
   if (!text) {
     let out = await (isPng ? image.png() : image.jpeg({ quality: 92 })).toBuffer()
     out = await addDomainToImage(out, width, height)
     return { buffer: out, ...outFormat }
   }
   const fontSize = Math.min(width, height) * 0.08
-  const fill = 'rgba(20,20,20,0.9)'
-  const stroke = 'rgba(255,255,255,0.95)'
-  const strokeWidth = Math.max(2, fontSize * 0.08)
-  const textStyle = `font-family="Arial,sans-serif" font-size="${fontSize}" font-weight="600" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" paint-order="stroke fill"`
+  const fill = 'rgba(15,15,15,0.88)'
+  const textStyle = `font-family="Liberation Sans, DejaVu Sans, FreeSans, sans-serif" font-size="${fontSize}" font-weight="600" fill="${fill}"`
 
   if (template === 'footer-tag') {
     const left = (width - text.length * fontSize * 0.6) / 2
     const top = height * 0.08
-    const svg = `<svg ${svgAttrs}><text x="${left}" y="${top}" ${textStyle}>${escapeXml(text)}</text></svg>`
+    const svg = `${svgPrefix}<svg ${svgAttrs}><text x="${left}" y="${top}" ${textStyle}>${escapeXml(text)}</text></svg>`
     const svgBuf = Buffer.from(svg)
     let out = await image.composite([{ input: svgBuf, left: 0, top: 0, blend: 'over' }]).toBuffer()
     if (!isPng) out = await sharp(out).jpeg({ quality: 92 }).toBuffer()
@@ -752,7 +752,7 @@ async function watermarkImage(inputBuffer, { mode, text, logoFile, template }) {
       { x: (3 * width) / 4, y: (3 * height) / 4 },
     ]
     const texts = positions.map(({ x, y }) => `<text x="${x}" y="${y}" dy="0.35em" text-anchor="middle" ${textStyle} transform="rotate(-45 ${x} ${y})">${escapeXml(text)}</text>`).join('')
-    const svg = `<svg ${svgAttrs}>${texts}</svg>`
+    const svg = `${svgPrefix}<svg ${svgAttrs}>${texts}</svg>`
     const svgBuf = Buffer.from(svg)
     let out = await image.composite([{ input: svgBuf, left: 0, top: 0, blend: 'over' }]).toBuffer()
     if (!isPng) out = await sharp(out).jpeg({ quality: 92 }).toBuffer()
@@ -762,7 +762,7 @@ async function watermarkImage(inputBuffer, { mode, text, logoFile, template }) {
   // diagonal-center: single text centered, rotated
   const left = (width - text.length * fontSize * 0.6) / 2
   const top = (height - fontSize) / 2
-  const svg = `<svg ${svgAttrs}><text x="${left}" y="${top}" ${textStyle} transform="rotate(-45 ${width / 2} ${height / 2})">${escapeXml(text)}</text></svg>`
+  const svg = `${svgPrefix}<svg ${svgAttrs}><text x="${left}" y="${top}" ${textStyle} transform="rotate(-45 ${width / 2} ${height / 2})">${escapeXml(text)}</text></svg>`
   const svgBuf = Buffer.from(svg)
   let out = await image.composite([{ input: svgBuf, left: 0, top: 0, blend: 'over' }]).toBuffer()
   if (!isPng) out = await sharp(out).jpeg({ quality: 92 }).toBuffer()
