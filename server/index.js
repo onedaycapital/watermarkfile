@@ -676,10 +676,13 @@ function drawLogoWatermark(page, embeddedImage, { width, height, template }) {
 }
 
 async function watermarkImage(inputBuffer, { mode, text, logoFile, template }) {
-  const image = sharp(inputBuffer)
+  // Normalize EXIF orientation so dimensions and composite positions match what the user sees
+  const image = sharp(inputBuffer).rotate()
   const meta = await image.metadata()
   const width = meta.width || 800
   const height = meta.height || 600
+  const isPng = meta.format === 'png'
+  const outFormat = isPng ? { contentType: 'image/png', ext: '.png' } : { contentType: 'image/jpeg', ext: '.jpg' }
 
   if (mode === 'logo' && logoFile) {
     const logo = sharp(logoFile.buffer)
@@ -688,13 +691,13 @@ async function watermarkImage(inputBuffer, { mode, text, logoFile, template }) {
     const scale = Math.min(maxDim / (logoMeta.width || 1), maxDim / (logoMeta.height || 1), 1)
     const w = Math.round((logoMeta.width || 1) * scale)
     const h = Math.round((logoMeta.height || 1) * scale)
-    // Semi-transparent logo for OCR-friendly watermarks (aligns with LOGO_WATERMARK_OPACITY for PDFs)
-    const logoBuf = await logo.resize(w, h).ensureAlpha(LOGO_WATERMARK_OPACITY).png().toBuffer()
+    // Force opacity: removeAlpha then ensureAlpha so PNG logos get semi-transparent (ensureAlpha is no-op if alpha exists)
+    const logoBuf = await logo.resize(w, h).removeAlpha().ensureAlpha(LOGO_WATERMARK_OPACITY).png().toBuffer()
 
     if (template === 'footer-tag') {
       const left = Math.round((width - w) / 2)
       const top = 20
-      let out = await image.composite([{ input: logoBuf, left, top, blend: 'over' }]).toBuffer()
+      let out = await image.composite([{ input: logoBuf, left, top, blend: 'over' }]).png().toBuffer()
       out = await addDomainToImage(out, width, height)
       return { buffer: out, contentType: 'image/png', ext: '.png' }
     }
@@ -706,35 +709,37 @@ async function watermarkImage(inputBuffer, { mode, text, logoFile, template }) {
         { left: Math.round((3 * width) / 4 - w / 2), top: Math.round((3 * height) / 4 - h / 2) },
       ]
       const composites = positions.map(({ left, top }) => ({ input: logoBuf, left, top, blend: 'over' }))
-      let out = await image.composite(composites).toBuffer()
+      let out = await image.composite(composites).png().toBuffer()
       out = await addDomainToImage(out, width, height)
       return { buffer: out, contentType: 'image/png', ext: '.png' }
     }
     // diagonal-center: single logo centered
     const left = Math.round((width - w) / 2)
     const top = Math.round((height - h) / 2)
-    let out = await image.composite([{ input: logoBuf, left, top, blend: 'over' }]).toBuffer()
+    let out = await image.composite([{ input: logoBuf, left, top, blend: 'over' }]).png().toBuffer()
     out = await addDomainToImage(out, width, height)
     return { buffer: out, contentType: 'image/png', ext: '.png' }
   }
 
-  // Text mode: use SVG overlay
+  // Text mode: use SVG overlay (xmlns + viewBox so Sharp/librsvg rasterizes correctly on JPEG)
+  const svgAttrs = `xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"`
   if (!text) {
-    let out = await image.toBuffer()
+    let out = await (isPng ? image.png() : image.jpeg({ quality: 92 })).toBuffer()
     out = await addDomainToImage(out, width, height)
-    return { buffer: out, contentType: meta.format === 'png' ? 'image/png' : 'image/jpeg', ext: meta.format === 'png' ? '.png' : '.jpg' }
+    return { buffer: out, ...outFormat }
   }
   const fontSize = Math.min(width, height) * 0.06
-  const fill = 'rgba(128,128,128,0.4)'
+  const fill = 'rgba(80,80,80,0.55)'
 
   if (template === 'footer-tag') {
     const left = (width - text.length * fontSize * 0.6) / 2
     const top = height * 0.08
-    const svg = `<svg width="${width}" height="${height}"><text x="${left}" y="${top}" font-family="Arial" font-size="${fontSize}" fill="${fill}">${escapeXml(text)}</text></svg>`
+    const svg = `<svg ${svgAttrs}><text x="${left}" y="${top}" font-family="Arial,sans-serif" font-size="${fontSize}" fill="${fill}">${escapeXml(text)}</text></svg>`
     const svgBuf = Buffer.from(svg)
     let out = await image.composite([{ input: svgBuf, left: 0, top: 0, blend: 'over' }]).toBuffer()
+    if (!isPng) out = await sharp(out).jpeg({ quality: 92 }).toBuffer()
     out = await addDomainToImage(out, width, height)
-    return { buffer: out, contentType: meta.format === 'png' ? 'image/png' : 'image/jpeg', ext: meta.format === 'png' ? '.png' : '.jpg' }
+    return { buffer: out, ...outFormat }
   }
   if (template === 'repeating-pattern') {
     const positions = [
@@ -743,21 +748,23 @@ async function watermarkImage(inputBuffer, { mode, text, logoFile, template }) {
       { x: width / 4, y: (3 * height) / 4 },
       { x: (3 * width) / 4, y: (3 * height) / 4 },
     ]
-    const texts = positions.map(({ x, y }) => `<text x="${x}" y="${y}" dy="0.35em" font-family="Arial" font-size="${fontSize}" fill="${fill}" text-anchor="middle" transform="rotate(-45 ${x} ${y})">${escapeXml(text)}</text>`).join('')
-    const svg = `<svg width="${width}" height="${height}">${texts}</svg>`
+    const texts = positions.map(({ x, y }) => `<text x="${x}" y="${y}" dy="0.35em" font-family="Arial,sans-serif" font-size="${fontSize}" fill="${fill}" text-anchor="middle" transform="rotate(-45 ${x} ${y})">${escapeXml(text)}</text>`).join('')
+    const svg = `<svg ${svgAttrs}>${texts}</svg>`
     const svgBuf = Buffer.from(svg)
     let out = await image.composite([{ input: svgBuf, left: 0, top: 0, blend: 'over' }]).toBuffer()
+    if (!isPng) out = await sharp(out).jpeg({ quality: 92 }).toBuffer()
     out = await addDomainToImage(out, width, height)
-    return { buffer: out, contentType: meta.format === 'png' ? 'image/png' : 'image/jpeg', ext: meta.format === 'png' ? '.png' : '.jpg' }
+    return { buffer: out, ...outFormat }
   }
   // diagonal-center: single text centered, rotated
   const left = (width - text.length * fontSize * 0.6) / 2
   const top = (height - fontSize) / 2
-  const svg = `<svg width="${width}" height="${height}"><text x="${left}" y="${top}" font-family="Arial" font-size="${fontSize}" fill="${fill}" transform="rotate(-45 ${width / 2} ${height / 2})">${escapeXml(text)}</text></svg>`
+  const svg = `<svg ${svgAttrs}><text x="${left}" y="${top}" font-family="Arial,sans-serif" font-size="${fontSize}" fill="${fill}" transform="rotate(-45 ${width / 2} ${height / 2})">${escapeXml(text)}</text></svg>`
   const svgBuf = Buffer.from(svg)
   let out = await image.composite([{ input: svgBuf, left: 0, top: 0, blend: 'over' }]).toBuffer()
+  if (!isPng) out = await sharp(out).jpeg({ quality: 92 }).toBuffer()
   out = await addDomainToImage(out, width, height)
-  return { buffer: out, contentType: meta.format === 'png' ? 'image/png' : 'image/jpeg', ext: meta.format === 'png' ? '.png' : '.jpg' }
+  return { buffer: out, ...outFormat }
 }
 
 function escapeXml(s) {

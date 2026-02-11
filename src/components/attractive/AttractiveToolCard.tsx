@@ -355,10 +355,10 @@ export function AttractiveToolCard({ onWatermarkRequest, disabled, loadedDefault
             </button>
           </div>
           <div className="min-w-0 flex-1 text-center">
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+            <h2 className="text-2xl md:text-3xl font-bold text-violet-700 tracking-tight">
               Create Your Watermarked Files
             </h2>
-            <p className="text-xs text-slate-500 mt-1 break-words">
+            <p className="text-sm text-slate-600 mt-1.5 break-words">
               Use &quot;Save as default&quot; in steps 1 and 2 to remember your choices.
             </p>
           </div>
