@@ -75,6 +75,7 @@ function LiveStatsSection() {
 import { AttractiveProgressPipeline } from '../components/attractive/AttractiveProgressPipeline'
 import { AttractiveResultsPanel } from '../components/attractive/AttractiveResultsPanel'
 import { Footer } from '../components/Footer'
+import { ShareDocumentsTiles } from '../components/attractive/ShareDocumentsTiles'
 import type { PipelineState, ProcessedFile, WatermarkOptions } from '../types'
 import type { StoredDefaults } from '../lib/defaults'
 export type PipelineStatus = 'idle' | 'uploading' | 'processing' | 'ready' | 'error'
@@ -204,6 +205,7 @@ export function AttractiveView({
             {' '}to get watermarked files back in your inbox—no need to visit the site again.
           </p>
         </main>
+        <ShareDocumentsTiles />
         <Footer />
       </div>
     </div>
