@@ -197,13 +197,16 @@ export function AttractiveView({
               />
             </div>
           )}
-          <p className="text-center text-sm text-slate-400 mt-12 px-4 max-w-2xl mx-auto leading-relaxed">
-            Set your default watermark once on the site, then email PDFs or images to{' '}
-            <a href="mailto:submit@doc.watermarkfile.com" className="text-slate-300 hover:text-white font-medium underline underline-offset-2 transition-colors duration-200">
-              submit@doc.watermarkfile.com
-            </a>
-            {' '}to get watermarked files back in your inbox—no need to visit the site again.
-          </p>
+          <section className="text-center mt-12 px-4 max-w-2xl mx-auto">
+            <h2 className="text-xl md:text-2xl font-bold text-white">Set Once. Send Anytime.</h2>
+            <p className="text-sm text-slate-400 mt-2 leading-relaxed">
+              Save your watermark once and simply email files to{' '}
+              <a href="mailto:submit@doc.watermarkfile.com" className="text-slate-300 hover:text-white font-medium underline underline-offset-2 transition-colors duration-200">
+                submit@doc.watermarkfile.com
+              </a>
+              {' '}to get them returned automatically watermarked. No login required.
+            </p>
+          </section>
         </main>
         <ShareDocumentsTiles />
         <Footer />
