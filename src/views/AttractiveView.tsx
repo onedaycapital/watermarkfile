@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AttractiveHeader } from '../components/attractive/AttractiveHeader'
 import { AttractiveHero } from '../components/attractive/AttractiveHero'
+import { HowWatermarkFileWorks } from '../components/attractive/HowWatermarkFileWorks'
 import { AttractiveToolCard } from '../components/attractive/AttractiveToolCard'
 import { IconCheck } from '../components/attractive/Icons'
 
@@ -143,8 +144,9 @@ export function AttractiveView({
         <AttractiveHeader />
         <AttractiveHero />
         <main className="flex-1 w-full pb-12 md:pb-16 pt-2">
+          <HowWatermarkFileWorks />
           {!showResults ? (
-            <div id="watermark-tool" className="flex flex-col items-center gap-6 md:gap-8 scroll-mt-8">
+            <div id="watermark-tool" className="flex flex-col items-center gap-6 md:gap-8 scroll-mt-8 pt-12 md:pt-16">
               <AttractiveToolCard
                 key={loadedDefaults ? `defaults-${loadedDefaults.mode}-${loadedDefaults.template}-${loadedDefaults.scope}` : 'no-defaults'}
                 onWatermarkRequest={onWatermarkRequest}
@@ -182,7 +184,7 @@ export function AttractiveView({
               )}
             </div>
           ) : (
-            <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 md:pt-16">
               <AttractiveResultsPanel
                 files={results}
                 isVerified={isVerified}
