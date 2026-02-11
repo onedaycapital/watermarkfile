@@ -139,7 +139,7 @@ export function AttractiveView({
           background: 'radial-gradient(ellipse 80% 50% at 50% -15%, rgba(99, 102, 241, 0.2), transparent 50%), radial-gradient(ellipse 50% 60% at 90% 60%, rgba(139, 92, 246, 0.12), transparent 50%), radial-gradient(ellipse 40% 40% at 10% 80%, rgba(59, 130, 246, 0.08), transparent 50%)',
         }}
       />
-      <div className="relative flex-1 flex flex-col overflow-visible">
+      <div className="relative flex-1 flex flex-col overflow-x-hidden min-w-0">
         <AttractiveHeader />
         <AttractiveHero />
         <main className="flex-1 w-full pb-12 md:pb-16 pt-2">

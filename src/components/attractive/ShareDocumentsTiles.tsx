@@ -22,7 +22,7 @@ function Tile({ title, description }: { title: string; description: string }) {
 
 export function ShareDocumentsTiles() {
   return (
-    <section className="w-full py-12 md:py-16 overflow-hidden" aria-labelledby="share-docs-heading">
+    <section className="w-full max-w-full py-12 md:py-16 overflow-hidden min-w-0" aria-labelledby="share-docs-heading">
       <div className="text-center mb-8 px-4">
         <h2 id="share-docs-heading" className="text-2xl md:text-3xl font-bold text-white tracking-tight">
           Share Documents. Keep Control.
@@ -31,7 +31,7 @@ export function ShareDocumentsTiles() {
           Watermark Before You Send.
         </p>
       </div>
-      <div className="relative">
+      <div className="relative overflow-hidden min-w-0">
         <div
           className="flex gap-4 will-change-transform"
           style={{
